@@ -115,30 +115,29 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
-	//move camera:
+	//move player:
 	{
 
 		//combine inputs into a move:
 		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
+		glm::vec2 move = glm::vec3(0.0f);
+		if (left.pressed && !right.pressed) move.x = -1.0f;
 		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
+		if (down.pressed && !up.pressed) move.y = -1.0f;
 		if (!down.pressed && up.pressed) move.y = 1.0f;
 
 		//make it so that moving diagonally doesn't go faster:
 		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
 
-		glm::mat4x3 frame = camera->transform->make_parent_from_local();
-		glm::vec3 frame_right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 frame_forward = -frame[2];
+		glm::mat4x3 frame = player->make_parent_from_local();
+		glm::vec3 frame_right = -frame[0];
+		glm::vec3 frame_forward = -frame[1];
 
-		camera->transform->position += move.x * frame_right + move.y * frame_forward;
+		player->position += move.x * frame_right + move.y * frame_forward;
 	}
 
-	{ //update listener to camera position:
-		glm::mat4x3 frame = camera->transform->make_parent_from_local();
+	{ //update listener to player position:
+		glm::mat4x3 frame = player->make_parent_from_local();
 		glm::vec3 frame_right = frame[0];
 		glm::vec3 frame_at = frame[3];
 		Sound::listener.set_position_right(frame_at, frame_right, 1.0f / 60.0f);
@@ -183,12 +182,12 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		));
 
 		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+		lines.draw_text("WASD moves character. Mouse motion rotates camera; escape ungrabs mouse",
 			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
 		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+		lines.draw_text("WASD moves character. Mouse motion rotates camera; escape ungrabs mouse",
 			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
