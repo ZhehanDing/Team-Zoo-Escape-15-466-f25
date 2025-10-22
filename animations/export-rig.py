@@ -137,9 +137,6 @@ def topological_sort(bones : bpy.types.ArmatureBones | bpy.types.PoseBone) -> li
 	
 	return sorted_bones
 
-from math import radians
-corr = (Quaternion((0, 0, 1), radians(180)) @ Quaternion((0, 1, 0), radians(-90))).to_matrix().to_4x4()
-
 #skeleton to write:
 def write_skeleton(obj : bpy.types.Object, outfile):
 	assert(obj.type == "ARMATURE")
@@ -202,8 +199,8 @@ def write_skeleton(obj : bpy.types.Object, outfile):
 		# pack bone parent index
 		local_data += struct.pack('I', parent)
 		
-		local_data += matrix_to_bytes(corr @ bone.matrix_local.inverted(), (4,4))
-		local_data += matrix_to_bytes(bone.matrix_local @ corr.inverted(), (4,4))
+		local_data += matrix_to_bytes(bone.matrix_local.inverted(), (4,4))
+		local_data += matrix_to_bytes(bone.matrix_local, (4,4))
 
 		if len(local_data) > 1000:
 			data.append(local_data)
@@ -255,9 +252,6 @@ def write_animations(obj : bpy.types.Object, outfile):
 	assert(obj.type == "ARMATURE")
 	armature = obj.data
 
-	pose_bones = topological_sort(obj.pose.bones)
-	actor_count = len(pose_bones)
-
 	#data contains N keyframes, holding storing world_to_local 4x4 matrices for each bone at each keyframe:
 	data = []
 
@@ -277,9 +271,15 @@ def write_animations(obj : bpy.types.Object, outfile):
 	keyframes = b''
 
 	# set armature to pose position
+	bpy.context.view_layer.objects.active = obj
+	bpy.ops.object.mode_set(mode='POSE')
 	armature.pose_position = 'POSE'
 
-	keyframe_index = 0
+	pose_bones = topological_sort(obj.pose.bones)
+	bones = topological_sort(obj.data.bones)
+	actor_count = len(pose_bones)
+	
+	keyframe_total = 0
 	for action in bpy.data.actions:
 		if action in to_write:
 			to_write.remove(action)
@@ -290,6 +290,15 @@ def write_animations(obj : bpy.types.Object, outfile):
 
 		print("-- Writing action '" + name + "'...")
 
+		# assign the action to the armature
+		obj.animation_data.action = action
+		obj.animation_data.action_slot = action.slots.active
+		bpy.context.scene.frame_set(int(action.frame_range[0]))
+		bpy.context.view_layer.update()
+
+		
+		keyframe_index = 0
+
 		#record action name, start position and  count in the index:
 		name_begin = len(strings)
 		strings += bytes(name, "utf8")
@@ -297,7 +306,7 @@ def write_animations(obj : bpy.types.Object, outfile):
 		actor_ct += struct.pack('I', actor_count)
 		index0 += struct.pack('I', name_begin)
 		index0 += struct.pack('I', name_end)
-		index0 += struct.pack('I', keyframe_index) #bone_begin
+		index0 += struct.pack('I', keyframe_total) #bone_begin
 
 		local_data = b''
 		
@@ -306,17 +315,15 @@ def write_animations(obj : bpy.types.Object, outfile):
 		# get the frames of each keyframe
 		frames = sorted({key.co.x for fcurve in action.fcurves for key in fcurve.keyframe_points})
 		
-		# assign the action to the armature
-		obj.animation_data.action = action
-
 		for i in frames:
 			# update the view to this frame: https://blender.stackexchange.com/questions/132403/pose-bones-matrix-does-not-update-after-frame-change-via-script
 			bpy.context.scene.frame_set(int(i))
 			bpy.context.view_layer.update()
 			for j in range(actor_count):
-				t, r, s = Matrix.decompose(Quaternion((0,0,1), radians(180)).to_matrix().to_4x4() @ pose_bones[j].matrix_basis)
+				t, r, s = (pose_bones[j].matrix_basis).decompose()
+				r.normalize()
 				local_data += struct.pack('fff', *t)
-				local_data += struct.pack('ffff', *r)
+				local_data += struct.pack('ffff', r.x, r.y, r.z, r.w)
 				local_data += struct.pack('fff', *s)
 
 				if len(local_data) > 1000:
@@ -335,16 +342,17 @@ def write_animations(obj : bpy.types.Object, outfile):
 			index1 += struct.pack('I', len(strings))
 
 		data.append(local_data)
-
-		index0 += struct.pack('I', keyframe_index) #action_end
+		keyframe_total += keyframe_index
+		index0 += struct.pack('I', keyframe_total) #action_end
 
 	data = b''.join(data)
 
 	# reset rest position
 	armature.pose_position = 'REST'
+	bpy.ops.object.mode_set(mode='OBJECT')
 
 	#check that code created as much data as anticipated:
-	assert(len(frames)*actor_count*(4*3+4*4+4*3) == len(data))
+	assert(keyframe_total*(4*3+4*4+4*3) == len(data))
 
 	#write the data chunk and index chunk to an output blob:
 	blob = open(outfile, 'wb')

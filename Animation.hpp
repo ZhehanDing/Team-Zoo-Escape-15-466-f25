@@ -212,7 +212,7 @@ AnimationBuffer< T >::AnimationBuffer(std::string const &filename) {
         uint32_t keyframe_index = 0;
         for (size_t i = 0; i < anim_index.size(); ++i) {
             auto const &anim_entry = anim_index[i];
-            if(!(anim_entry.name_begin <= anim_entry.name_end && anim_entry.name_end <= data.size())) {
+            if(!(anim_entry.name_begin <= anim_entry.name_end && anim_entry.name_end <= strings.size())) {
 				throw std::runtime_error("index entry has out-of-range name begin/end");
             }
             if(!(anim_entry.keyframe_begin <= anim_entry.keyframe_end && anim_entry.keyframe_end <= data.size())) {
@@ -221,8 +221,6 @@ AnimationBuffer< T >::AnimationBuffer(std::string const &filename) {
 
             std::string name(&strings[0] + anim_entry.name_begin, &strings[0] + anim_entry.name_end);
             Animation< T > anim(name, fps, true);
-            anim.name = name;
-            anim.fps = fps;
             anim.data.assign(
                 data.begin() + anim_entry.keyframe_begin,
                 data.begin() + anim_entry.keyframe_end
@@ -235,6 +233,7 @@ AnimationBuffer< T >::AnimationBuffer(std::string const &filename) {
                 keyframes.begin() + keyframe_index + key_count
             );        
             assert(anim.keyframes.size() == key_count);
+            assert(anim.keyframes[0].start == 0);
 
             anim.index_to_name.resize(actor_count);
             for (uint32_t k = 0; k < actor_count; ++k) {
@@ -357,7 +356,6 @@ std::map< std::string, T > AnimationGraph< T >::sample() {
         (keyframe_index + 1) % key_count :
         std::min(key_count - 1, keyframe_index + 1);
 
-
     const Keyframe &curr = animation.keyframes[keyframe_index];
     const Keyframe &next = animation.keyframes[next_key_index];
 
@@ -373,7 +371,6 @@ std::map< std::string, T > AnimationGraph< T >::sample() {
 
     assert(curr.count == next.count);
     std::map < std::string, T > res;
-
     for (uint32_t i = 0; i < curr.count; i++) {
         res.insert(std::make_pair(animation.index_to_name[i], 
             interp(animation.data[curr.start + i], animation.data[next.start + i], t)));

@@ -3,6 +3,10 @@
 #include "Scene.hpp"
 #include "Sound.hpp"
 
+#include "Collision.hpp"
+#include "Skeleton.hpp"
+#include "Animation.hpp"
+
 #include <glm/glm.hpp>
 
 #include <vector>
@@ -23,29 +27,25 @@ struct PlayMode : Mode {
 	struct Button {
 		uint8_t downs = 0;
 		uint8_t pressed = 0;
-	} left, right, down, up;
+	} left, right, down, up, lshift, space, one, two;
 
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
 
-	//hexapod leg to wobble:
-	Scene::Transform *hip = nullptr;
-	Scene::Transform *upper_leg = nullptr;
-	Scene::Transform *lower_leg = nullptr;
-	glm::quat hip_base_rotation;
-	glm::quat upper_leg_base_rotation;
-	glm::quat lower_leg_base_rotation;
-	float wobble = 0.0f;
+	// if time allows, potentially maintain structure to register and play sfx
+	// std::map< std::string, std::vector< Sound::Sample *>> sfx;
 
-	glm::vec3 get_leg_tip_position();
+	struct Player {
+		Scene::Transform transform;
+		std::vector< Scene::Drawable > drawables;
 
-	//music coming from the tip of the leg (as a demonstration):
-	std::shared_ptr< Sound::PlayingSample > leg_tip_loop;
+		Collider col = Collider(&transform);
+	} player;
 
-	//car honk sound:
-	std::shared_ptr< Sound::PlayingSample > honk_oneshot;
-	
 	//camera:
 	Scene::Camera *camera = nullptr;
-
+	struct CameraInfo {
+		float yaw = 0.f;
+		float pitch = glm::radians(90.f);
+	} cam_info;
 };

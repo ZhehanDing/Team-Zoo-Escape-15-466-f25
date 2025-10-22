@@ -34,9 +34,8 @@ if (maek.OS === "windows") {
 		`/I${NEST_LIBS}/opusfile/include`,
 		`/I${NEST_LIBS}/libopus/include`,
 		`/I${NEST_LIBS}/libogg/include`,
-		`/I${NEST_LIBS}/harfbuzz/include`,
-		`/I${NEST_LIBS}/freetype/include`,
 		//#disable a few warnings:
+		`/fsanitize=address`,
 		`/wd4146`, //-1U is still unsigned
 		`/wd4297`, //unforunately SDLmain is nothrow
 		`/wd4100`, //unreferenced formal parameter
@@ -50,8 +49,6 @@ if (maek.OS === "windows") {
 		`/LIBPATH:${NEST_LIBS}/opusfile/lib`, `opusfile.lib`,
 		`/LIBPATH:${NEST_LIBS}/libopus/lib`, `opus.lib`,
 		`/LIBPATH:${NEST_LIBS}/libogg/lib`, `libogg.lib`,
-		`/LIBPATH:${NEST_LIBS}/harfbuzz/lib`, `harfbuzz.lib`,
-		`/LIBPATH:${NEST_LIBS}/freetype/lib`, `freetype.lib`,
 		`/MANIFEST:EMBED`, `/MANIFESTINPUT:set-utf8-code-page.manifest`
 	);
 } else if (maek.OS === "linux") {
@@ -63,9 +60,7 @@ if (maek.OS === "windows") {
 		`-I${NEST_LIBS}/libpng/include`,
 		`-I${NEST_LIBS}/opusfile/include`,
 		`-I${NEST_LIBS}/libopus/include`,
-		`-I${NEST_LIBS}/libogg/include`,
-		`-I${NEST_LIBS}/harfbuzz/include`,
-		`-I${NEST_LIBS}/freetype/include`
+		`-I${NEST_LIBS}/libogg/include`
 	);
 	maek.options.LINKLibs.push(
 		//linker flags for nest libraries:
@@ -75,8 +70,6 @@ if (maek.OS === "windows") {
 		`-L${NEST_LIBS}/opusfile/lib`, `-lopusfile`,
 		`-L${NEST_LIBS}/libopus/lib`, `-lopus`,
 		`-L${NEST_LIBS}/libogg/lib`, `-logg`,
-		`-L${NEST_LIBS}/harfbuzz/lib`, `-lharfbuzz`,
-		`-L${NEST_LIBS}/freetype/lib`, `-lfreetype`
 	);
 } else if (maek.OS === "macos") {
 	maek.options.CPPFlags.push(
@@ -87,9 +80,7 @@ if (maek.OS === "windows") {
 		`-I${NEST_LIBS}/libpng/include`,
 		`-I${NEST_LIBS}/opusfile/include`,
 		`-I${NEST_LIBS}/libopus/include`,
-		`-I${NEST_LIBS}/libogg/include`,
-		`-I${NEST_LIBS}/harfbuzz/include`,
-		`-I${NEST_LIBS}/freetype/include`
+		`-I${NEST_LIBS}/libogg/include`
 	);
 	maek.options.LINKLibs.push(
 		//linker flags for nest libraries:
@@ -117,8 +108,6 @@ if (maek.OS === "windows") {
 		`-L${NEST_LIBS}/opusfile/lib`, `-lopusfile`,
 		`-L${NEST_LIBS}/libopus/lib`, `-lopus`,
 		`-L${NEST_LIBS}/libogg/lib`, `-logg`,
-		`-L${NEST_LIBS}/harfbuzz/lib`, `-lharfbuzz`,
-		`-L${NEST_LIBS}/freetype/lib`, `-lfreetype`
 	);
 }
 //use COPY to copy a file
@@ -131,9 +120,7 @@ let copies = [
 	maek.COPY(`${NEST_LIBS}/glm/dist/README-glm.txt`, `dist/README-glm.txt`),
 	maek.COPY(`${NEST_LIBS}/libopus/dist/README-libopus.txt`, `dist/README-libopus.txt`),
 	maek.COPY(`${NEST_LIBS}/opusfile/dist/README-opusfile.txt`, `dist/README-opusfile.txt`),
-	maek.COPY(`${NEST_LIBS}/libogg/dist/README-libogg.txt`, `dist/README-libogg.txt`),
-	maek.COPY(`${NEST_LIBS}/harfbuzz/dist/README-harfbuzz.txt`, `dist/README-harfbuzz.txt`),
-	maek.COPY(`${NEST_LIBS}/freetype/dist/README-freetype.txt`, `dist/README-freetype.txt`)
+	maek.COPY(`${NEST_LIBS}/libogg/dist/README-libogg.txt`, `dist/README-libogg.txt`)
 ];
 if (maek.OS === 'windows') {
 	copies.push( maek.COPY(`${NEST_LIBS}/SDL3/dist/SDL3.dll`, `dist/SDL3.dll`) );
@@ -150,6 +137,10 @@ if (maek.OS === 'windows') {
 // objFileBase (optional): base name object file to produce (if not supplied, set to options.objDir + '/' + cppFile without the extension)
 //returns objFile: objFileBase + a platform-dependant suffix ('.o' or '.obj')
 const game_names = [
+	maek.CPP('RiggedMesh.cpp'),
+	maek.CPP('DynamicMeshBuffer.cpp'),
+	maek.CPP('Skeleton.cpp'),
+	maek.CPP('Collision.cpp'),
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('main.cpp'),
 	maek.CPP('LitColorTextureProgram.cpp'),
@@ -186,10 +177,6 @@ const show_scene_names = [
 	maek.CPP('ShowSceneMode.cpp')
 ];
 
-const freetype_test_names = [
-	maek.CPP('freetype-test.cpp')
-];
-
 //the '[exeFile =] LINK(objFiles, exeFileBase, [, options])' links an array of objects into an executable:
 // objFiles: array of objects to link
 // exeFileBase: name of executable file to produce
@@ -198,10 +185,8 @@ const game_exe = maek.LINK([...game_names, ...common_names], 'dist/game');
 const show_meshes_exe = maek.LINK([...show_meshes_names, ...common_names], 'scenes/show-meshes');
 const show_scene_exe = maek.LINK([...show_scene_names, ...common_names], 'scenes/show-scene');
 
-const freetype_test_exe = maek.LINK([...freetype_test_names], 'freetype-test');
-
 //set the default target to the game (and copy the readme files):
-maek.TARGETS = [game_exe, show_meshes_exe, show_scene_exe, freetype_test_exe, ...copies];
+maek.TARGETS = [game_exe, show_meshes_exe, show_scene_exe, ...copies];
 
 //Note that tasks that produce ':abstract targets' are never cached.
 // This is similar to how .PHONY targets behave in make.
