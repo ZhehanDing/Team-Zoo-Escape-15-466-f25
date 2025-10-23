@@ -25,5 +25,10 @@ node Maekfile.js && dist/game
 
 Sources: (TODO: list a source URL for any assets you did not create yourself. Make sure you have a license for the asset.)
 
+Low Poly Evergreen Tree Short 3: https://www.blenderkit.com/get-blenderkit/8a94fa91-95a8-4997-8ec3-392fa148da9e/
+Low Poly Evergreen Tree Tall 2: https://www.blenderkit.com/get-blenderkit/ad5bf1e4-854c-4a2c-b33d-49f308a2b882/
+Cobblestone road: https://www.blenderkit.com/get-blenderkit/c71aae1e-fa64-4454-85e0-4f76b49b9a7b/
+Street lamp: https://www.blenderkit.com/get-blenderkit/58ed8a12-f81f-4f24-ba5b-de43e1d6baf8/
+
 This game was built with [NEST](NEST.md).
 
