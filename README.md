@@ -17,8 +17,7 @@ How To Play:
 (TODO: describe the controls and (if needed) goals/strategy.)
 
 ```
-/Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/zoo.blend:Main dist/zoo.pnct
-/Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/zoo.blend:Main dist/zoo.scene
+/Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/zoo.blend:Main dist/zoo.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/zoo.blend:Main dist/zoo.scene
 
 node Maekfile.js && dist/game
 ```
@@ -29,6 +28,7 @@ Low Poly Evergreen Tree Short 3: https://www.blenderkit.com/get-blenderkit/8a94f
 Low Poly Evergreen Tree Tall 2: https://www.blenderkit.com/get-blenderkit/ad5bf1e4-854c-4a2c-b33d-49f308a2b882/
 Cobblestone road: https://www.blenderkit.com/get-blenderkit/c71aae1e-fa64-4454-85e0-4f76b49b9a7b/
 Street lamp: https://www.blenderkit.com/get-blenderkit/58ed8a12-f81f-4f24-ba5b-de43e1d6baf8/
+Man model for separate body parts: https://www.fab.com/listings/65434ad8-bfd3-466d-bc4f-6319ec3366f8
 
 This game was built with [NEST](NEST.md).
 
