@@ -53,6 +53,25 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
 	camera = &scene.cameras.front();
 	base_fovy = camera->fovy;
+	enemy_base_rotation = enemy->rotation;
+
+	// build a simple square/loop around the enemy's start position:
+	glm::vec3 e0 = enemy->position;
+	float R = 6.0f; // patrol radius
+	enemy_waypoints = {
+		e0 + glm::vec3( 0.0f,  R, 0.0f),
+		e0 + glm::vec3( R,  0.0f, 0.0f),
+		e0 + glm::vec3( 0.0f, -R, 0.0f),
+		e0 + glm::vec3(-R,  0.0f, 0.0f)
+	};
+	enemy_wp_idx = 0;
+	enemy_wait_timer = 0.0f;
+}
+
+void PlayMode::trigger_game_over() {
+	if (game_over) return;           // idempotent
+	game_over = true;
+
 }
 
 PlayMode::~PlayMode() {
@@ -136,37 +155,33 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
-	//move player:
-	{
-		float diff = target_fovy - camera->fovy;
-		if (std::abs(diff) > 0.0001f) {
-			camera->fovy += diff * std::min(1.0f, elapsed * zoom_speed);
-		} else {
-			camera->fovy = target_fovy; // snap when close enough
-		}
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec3(0.0f);
-		if (left.pressed && !right.pressed) move.x = -1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y = -1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
+	// --- Camera zoom tween ---
+		if (game_over) {
+		// Optional: keep camera/UI effects, but block gameplay logic
+		// camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
+		return;
+	}
+	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed; // <-- changed line
+	// --- Player movement (WASD, relative to camera) ---
+	{
+		constexpr float PlayerSpeed = 30.0f;
+		glm::vec2 move = glm::vec2(0.0f);
+		if (left.pressed  && !right.pressed) move.x = -1.0f;
+		if (!left.pressed &&  right.pressed) move.x =  1.0f;
+		if (down.pressed  && !up.pressed)    move.y = -1.0f;
+		if (!down.pressed &&  up.pressed)    move.y =  1.0f;
+
+		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
 
 		glm::mat4x3 frame = player->make_parent_from_local();
-		glm::vec3 frame_right = -frame[0];
+		glm::vec3 frame_right   = -frame[0];
 		glm::vec3 frame_forward = -frame[1];
 
 		player->position += move.x * frame_right + move.y * frame_forward;
 	}
-	
-	{
-        // Smoothly interpolate camera fovy toward target_fovy
-        camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
-    }
 
+	// --- Stalk bar charge/decay (depends on enemy on-screen visibility) ---
 	if (stalking && enemy_visible) {
 		stalk_charge += stalk_charge_rate * elapsed;
 		if (stalk_charge > 1.0f) stalk_charge = 1.0f;
@@ -175,18 +190,134 @@ void PlayMode::update(float elapsed) {
 		if (stalk_charge < 0.0f) stalk_charge = 0.0f;
 	}
 
-	{ //update listener to player position:
+	// --- Enemy sensing: FOV + distance (+ optional LOS hook) ---
+	being_watched = false;
+	if (enemy && player) {
+		glm::mat4x3 e_world = enemy->make_world_from_local();
+		glm::vec3 e_pos     = e_world[3];
+		glm::vec3 e_forward = -glm::vec3(e_world[1]); // -Y is "forward"
+
+		glm::vec3 to_player3 = player->position - e_pos;
+		float dist = glm::length(to_player3);
+
+		if (dist > 0.0001f && dist <= enemy_view_distance) {
+			glm::vec3 dir = to_player3 / dist;
+			float cos_half_fov = std::cos(glm::radians(enemy_fov_deg * 0.5f));
+			float cos_theta    = glm::dot(glm::normalize(e_forward), dir);
+
+			bool in_fov = (cos_theta > cos_half_fov) && (glm::dot(e_forward, to_player3) > 0.0f);
+
+			// LOS hook (currently always unblocked):
+			auto occluded_enemy_to_player = [&]()->bool {
+				// TODO: implement a real ray/occlusion test if desired
+				return false;
+			};
+			bool blocked = occluded_enemy_to_player();
+
+			if (in_fov && !blocked) being_watched = true;
+		}
+	}
+
+	// --- Latch logic (sticky "seeing" state with grace timeout) ---
+	if (being_watched) {
+		watched_latched = true;
+		watched_grace_timer = watched_grace;
+		watched_accum += elapsed;
+		if (watched_accum >= watch_to_gameover) {
+			trigger_game_over();
+		}else {
+			// continuous requirement: reset if not watched this frame
+			watched_accum = 0.0f;
+		}
+	} else if (watched_latched) {
+		bool out_of_range = true;
+		bool blocked_now  = false;
+
+		if (enemy && player) {
+			glm::mat4x3 e_world = enemy->make_world_from_local();
+			glm::vec3 e_pos     = e_world[3];
+			float dist = glm::length(player->position - e_pos);
+			out_of_range = !(dist <= enemy_view_distance);
+
+			auto occluded_enemy_to_player = [&]()->bool { return false; };
+			blocked_now = occluded_enemy_to_player();
+		}
+
+		if (out_of_range || blocked_now) {
+			watched_grace_timer -= elapsed;
+			if (watched_grace_timer <= 0.0f) watched_latched = false;
+		} else {
+			// still good; refresh
+			watched_grace_timer = watched_grace;
+		}
+	}
+
+	// --- Enemy behavior: Stand-and-watch vs Patrol ---
+	if (enemy) {
+		// Compute planar vector to player for turning:
+		glm::vec2 to_player_xy(0.0f);
+		float to_player_dist = 0.0f;
+		if (player) {
+			glm::vec3 v = player->position - enemy->position;
+			to_player_xy = glm::vec2(v.x, v.y);
+			to_player_dist = glm::length(to_player_xy);
+		}
+
+		if (watched_latched) {
+			// STAND STILL, ONLY ROTATE to face player while latched
+			if (to_player_dist > 1e-4f) {
+				glm::vec2 dir = to_player_xy / to_player_dist;
+				float yaw = std::atan2(dir.x, dir.y); // +Y forward
+				glm::quat target_rot =
+					glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) * enemy_base_rotation;
+
+				float turn_speed = 8.0f; // tweak feel
+				enemy->rotation = glm::slerp(enemy->rotation, target_rot,
+				                             1.0f - std::exp(-turn_speed * elapsed));
+			}
+			// NO translation here -> feet frozen
+
+		} else if (!enemy_waypoints.empty()) {
+			// PATROL: waypoint walking (original logic)
+			if (enemy_wait_timer > 0.0f) {
+				enemy_wait_timer = std::max(0.0f, enemy_wait_timer - elapsed);
+			} else {
+				glm::vec3 target = enemy_waypoints[enemy_wp_idx];
+				glm::vec2 to = glm::vec2(target.x - enemy->position.x,
+				                         target.y - enemy->position.y);
+				float dist = glm::length(to);
+
+				if (dist <= enemy_reach_epsilon) {
+					enemy_wp_idx = (enemy_wp_idx + 1) % enemy_waypoints.size();
+					enemy_wait_timer = enemy_wait_at_point;
+				} else if (dist > 0.0f) {
+					glm::vec2 dir = to / dist;
+					float step = enemy_speed * elapsed;
+					if (step > dist) step = dist;
+
+					enemy->position.x += dir.x * step;
+					enemy->position.y += dir.y * step;
+
+					float yaw = std::atan2(dir.x, dir.y);
+					glm::quat target_rot =
+						glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) * enemy_base_rotation;
+					enemy->rotation = glm::slerp(enemy->rotation, target_rot,
+					                             1.0f - std::exp(-elapsed * 8.0f));
+				}
+			}
+		}
+	}
+
+	// --- Audio listener follow player ---
+	{
 		glm::mat4x3 frame = player->make_parent_from_local();
 		glm::vec3 frame_right = frame[0];
-		glm::vec3 frame_at = frame[3];
+		glm::vec3 frame_at    = frame[3];
 		Sound::listener.set_position_right(frame_at, frame_right, 1.0f / 60.0f);
 	}
 
-	//reset button press counters:
-	left.downs = 0;
-	right.downs = 0;
-	up.downs = 0;
-	down.downs = 0;
+	// --- reset one-frame key counts ---
+	left.downs = right.downs = up.downs = down.downs = 0;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
@@ -214,6 +345,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	scene.draw(*camera);
 	enemy_visible = true; // default
+
+	
 	if (enemy) {
 		// Project enemy position to screen:
 		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
@@ -355,6 +488,46 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		glEnable(GL_DEPTH_TEST);
 	}
 	
+	if (being_watched) {
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+		// Centered-ish: start slightly left of (0,0)
+		constexpr float H = 0.14f; // text size
+		glm::u8vec4 warn = glm::u8vec4(0xff, 0x40, 0x40, 0xff);
+		lines.draw_text("You are being watched!",
+			glm::vec3(-0.55f, 0.02f, 0.0f),   // tweak to taste for centering
+			glm::vec3(H, 0.0f, 0.0f),         // x step
+			glm::vec3(0.0f, H, 0.0f),         // y step
+			warn
+		);
+		glEnable(GL_DEPTH_TEST);
+	}
+	
+	if (game_over) {
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+		constexpr float H = 0.18f; // slightly larger text
+		glm::u8vec4 color = glm::u8vec4(0xff, 0x00, 0x00, 0xff); // bright red
+		lines.draw_text("Zoo has been locked",
+			glm::vec3(-0.7f, 0.0f, 0.0f),  // centered-ish position
+			glm::vec3(H, 0.0f, 0.0f),
+			glm::vec3(0.0f, H, 0.0f),
+			color
+		);
+		glEnable(GL_DEPTH_TEST);
+	}
 	{ //use DrawLines to overlay some text:
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
