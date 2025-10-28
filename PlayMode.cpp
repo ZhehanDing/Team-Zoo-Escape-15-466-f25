@@ -42,10 +42,16 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
 		if (transform.name == "Enemy") enemy = &transform;
-		if (transform.name == "Final_Deer Leg") transform.scale = glm::vec3(0.0f); // set invisible initially
+		if (transform.name == "Final_Deer") final_deer = &transform;
+		if (transform.name == "Final_Deer Leg") {
+			final_deer_leg = &transform;
+			transform.scale = glm::vec3(0.0f); // set invisible initially
+		}
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
+	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
+	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 
 	player_base_rotation = player->rotation;
 
@@ -188,6 +194,24 @@ void PlayMode::update(float elapsed) {
 	} else {
 		stalk_charge -= stalk_decay_rate * elapsed;
 		if (stalk_charge < 0.0f) stalk_charge = 0.0f;
+	}
+
+	if (stalk_charge >= 1.0f) {
+		if (deer_stage == 0) {
+			// Level completes, gets leg // TODO: add some effect; and deer needs to attack enemy before geting their leg
+			final_deer->scale = glm::vec3(0.0f); // hide original deer
+			final_deer_leg->scale = glm::vec3(1.0f);
+			deer_stage = 1;
+		}
+	}
+
+	if (stalk_charge >= 1.0f) {
+		if (deer_stage == 0) {
+			// Level completes, gets leg // TODO: add some effect; and deer needs to attack enemy before geting their leg
+			final_deer->scale = glm::vec3(0.0f); // hide original deer
+			final_deer_leg->scale = glm::vec3(1.0f);
+			deer_stage = 1;
+		}
 	}
 
 	// --- Enemy sensing: FOV + distance (+ optional LOS hook) ---

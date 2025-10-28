@@ -30,6 +30,9 @@ struct PlayMode : Mode {
 
 	Scene::Transform *player = nullptr;
 	Scene::Transform *enemy = nullptr;
+	Scene::Transform *final_deer = nullptr;
+	Scene::Transform *final_deer_leg = nullptr;
+	int deer_stage = 0; // 0 = original deer, 1 = deer + leg, 2 = ... etc.
 	glm::quat player_base_rotation;
 	
 	//camera:
