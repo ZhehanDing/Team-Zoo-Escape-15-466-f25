@@ -42,6 +42,7 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
 		if (transform.name == "Enemy") enemy = &transform;
+		if (transform.name == "Final_Deer Leg") transform.scale = glm::vec3(0.0f); // set invisible initially
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
