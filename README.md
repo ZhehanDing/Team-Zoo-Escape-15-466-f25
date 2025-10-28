@@ -17,7 +17,7 @@ How To Play:
 (TODO: describe the controls and (if needed) goals/strategy.)
 
 ```
-/Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/zoo.blend:Main dist/zoo.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/zoo.blend:Main dist/zoo.scene
+/Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.scene
 
 node Maekfile.js && dist/game
 ```

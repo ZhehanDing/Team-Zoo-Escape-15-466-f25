@@ -19,3 +19,4 @@ scenes/show-scene*
 *.blend[0-9]
 maek-cache.json
 scenes/local/*
+scenes/zoo_nolink.blend
