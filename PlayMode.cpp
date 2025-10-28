@@ -14,13 +14,13 @@
 
 GLuint zoo_meshes_for_lit_color_texture_program = 0;
 Load< MeshBuffer > zoo_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("zoo.pnct"));
+	MeshBuffer const *ret = new MeshBuffer(data_path("zoo_nolink.pnct"));
 	zoo_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
 	return ret;
 });
 
 Load< Scene > zoo_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("zoo.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+	return new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
