@@ -29,9 +29,21 @@ struct PlayMode : Mode {
 	Scene scene;
 
 	Scene::Transform *player = nullptr;
+	Scene::Transform *enemy = nullptr;
 	glm::quat player_base_rotation;
 	
 	//camera:
 	Scene::Camera *camera = nullptr;
+	bool focus_mode = false;           // toggled with right mouse
+	float player_speed_factor = 1.0f;  // 1.0 normally, 0.5 in focus mode
+	float base_fovy = 1.0f;            // store original camera fovy
+	float target_fovy = 1.0f;          // what fovy we’re moving toward
+	float zoom_speed = 3.0f; 
+	float stalk_charge = 0.0f;
+	// rate per second:
+	float stalk_charge_rate = 0.05f;   // fills while holding RMB
+	float stalk_decay_rate = 0.025f;    // drains when not holding
+	bool  stalking = false;           // true while RMB is held
+	bool enemy_visible = true; // updated in draw(), used in next update()
 
 };
