@@ -59,6 +59,14 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
 	camera = &scene.cameras.front();
 	base_fovy = camera->fovy;
+
+	cam = new Camera(camera, player);
+	cam->set_orbit_offset_from_anchor(glm::vec3(0.f, 0.f, 2.f));
+	cam->set_initial_look_degrees(-90.f, 180.f, 0.f); /* initial camera look: pitch, roll, yaw */
+	cam->set_sensitivity(1.5f);
+	cam->set_max_distance_from_camera_center(5.f);
+	// cam->set_pitch_range(-(float)M_PI, 0.f); //default
+
 	enemy_base_rotation = enemy->rotation;
 
 	// build a simple square/loop around the enemy's start position:
@@ -148,11 +156,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				evt.motion.xrel / float(window_size.y),
 				-evt.motion.yrel / float(window_size.y)
 			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
-			);
+
+			cam->update_camera(motion * camera->fovy);
 			return true;
 		}
 	}

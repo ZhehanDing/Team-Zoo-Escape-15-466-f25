@@ -2,6 +2,7 @@
 
 #include "Scene.hpp"
 #include "Sound.hpp"
+#include "Camera.hpp"
 
 #include <glm/glm.hpp>
 
@@ -36,6 +37,7 @@ struct PlayMode : Mode {
 	glm::quat player_base_rotation;
 	
 	//camera:
+	Camera *cam;
 	Scene::Camera *camera = nullptr;
 	bool focus_mode = false;           // toggled with right mouse
 	float player_speed_factor = 1.0f;  // 1.0 normally, 0.5 in focus mode
