@@ -1,43 +1,147 @@
 #include "PlayMode.hpp"
 
-#include "LitColorTextureProgram.hpp"
+// #include "LitColorTextureProgram.hpp"
+#include "BasicMaterialDeferredProgram.hpp"
+#include "LightMeshes.hpp"
+#include "CopyToScreenProgram.hpp"
 
 #include "DrawLines.hpp"
 #include "Mesh.hpp"
 #include "Load.hpp"
 #include "gl_errors.hpp"
 #include "data_path.hpp"
+#include "check_fb.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 
 #include <random>
 
-GLuint zoo_meshes_for_lit_color_texture_program = 0;
+GLuint zoo_for_basic_material_deferred_object = 0;
+GLuint light_for_basic_material_deferred_light = 0;
+// GLuint zoo_meshes_for_lit_color_texture_program = 0;
+
 Load< MeshBuffer > zoo_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("zoo_nolink.pnct"));
-	zoo_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+	zoo_for_basic_material_deferred_object = ret->make_vao_for_program(basic_material_deferred_object_program->program);
 	return ret;
 });
 
-Load< Scene > zoo_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
+	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
+	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
+
+	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
 		Scene::Drawable &drawable = scene.drawables.back();
 
-		drawable.pipeline = lit_color_texture_program_pipeline;
+		// drawable.pipeline = lit_color_texture_program_pipeline;
+		drawable.pipeline = basic_material_deferred_object_program_pipeline;
 
-		drawable.pipeline.vao = zoo_meshes_for_lit_color_texture_program;
+		drawable.pipeline.vao = zoo_for_basic_material_deferred_object;
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
 
+		float roughness = 1.0f;
+		if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
+			roughness = (transform->position.y + 10.0f) / 18.0f;
+		}
+		drawable.pipeline.set_uniforms = [roughness](){
+			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
+		};
 	});
+
+	return ret;
 });
 
+//Helper: maintain a framebuffer to hold rendered geometry
+struct FB {
+	//object data gets stored in these textures:
+	GLuint position_tex = 0;
+	GLuint normal_roughness_tex = 0;
+	GLuint albedo_tex = 0;
+	
+	//output image gets written to this texture:
+	GLuint output_tex = 0;
 
-PlayMode::PlayMode() : scene(*zoo_scene) {
+	//depth buffer is shared between objects + lights pass:
+	GLuint depth_rb = 0;
+
+	GLuint objects_fb = 0; //(position, normal, albedo) + depth
+	GLuint lights_fb = 0; //(output) + depth
+
+	glm::uvec2 size = glm::uvec2(0);
+
+	void resize(glm::uvec2 const &drawable_size) {
+		if (drawable_size == size) return;
+		size = drawable_size;
+
+		//helper to allocate a texture:
+		auto alloc_tex = [&](GLuint &tex, GLenum internal_format) {
+			if (tex == 0) glGenTextures(1, &tex);
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexImage2D(GL_TEXTURE_2D, 0, internal_format, size.x, size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		};
+
+		//set up position_tex as a 32-bit floating point RGB texture:
+		alloc_tex(position_tex, GL_RGB32F);
+
+		//set up normal_roughness_tex as a 16-bit floating point RGBA texture:
+		alloc_tex(normal_roughness_tex, GL_RGBA16F);
+
+		//set up albedo_tex as an 8-bit fixed point RGBA texture:
+		alloc_tex(albedo_tex, GL_RGBA8);
+
+		//set up output_tex as an 8-bit fixed point RGBA texture:
+		alloc_tex(output_tex, GL_RGBA8);
+
+		//if depth_rb does not have a name, name it:
+		if (depth_rb == 0) glGenRenderbuffers(1, &depth_rb);
+		//set up depth_rb as a 24-bit fixed-point depth buffer:
+		glBindRenderbuffer(GL_RENDERBUFFER, depth_rb);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size.x, size.y);
+		glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+		//if objects framebuffer doesn't have a name, name it and attach textures:
+		if (objects_fb == 0) {
+			glGenFramebuffers(1, &objects_fb);
+			//set up framebuffer: (don't need to do when resizing)
+			glBindFramebuffer(GL_FRAMEBUFFER, objects_fb);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, position_tex, 0);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, normal_roughness_tex, 0);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, albedo_tex, 0);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
+			GLenum bufs[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+			glDrawBuffers(3, bufs);
+			check_fb();
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+
+		//if lights-drawing framebuffer doesn't have a name, name it and attach textures:
+		if (lights_fb == 0) {
+			glGenFramebuffers(1, &lights_fb);
+			//set up framebuffer: (don't need to do when resizing)
+			glBindFramebuffer(GL_FRAMEBUFFER, lights_fb);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, output_tex, 0);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
+			GLenum bufs[1] = {GL_COLOR_ATTACHMENT0};
+			glDrawBuffers(1, bufs);
+			check_fb();
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+
+	}
+} fb;
+
+
+PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
@@ -352,231 +456,404 @@ void PlayMode::update(float elapsed) {
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	//update camera aspect ratio for drawable:
 	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
+	glm::mat4 world_to_clip = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	glm::vec3 eye = camera->transform->make_world_from_local()[3];
 
-	//set up light type and position for lit_color_texture_program:
-	// TODO: consider using the Light(s) in the scene to do this
-	glUseProgram(lit_color_texture_program->program);
-	glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
-	glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
-	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
-	glUseProgram(0);
+	// //set up light type and position for lit_color_texture_program:
+	// // TODO: consider using the Light(s) in the scene to do this
+	// glUseProgram(lit_color_texture_program->program);
+	// glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
+	// glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
+	// glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
+	// glUseProgram(0);
 
-	if (focus_mode) {
-		glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // stark white background for high contrast
-	} else {
-		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
-	}
-	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	//--- draw geometry to framebuffer ---
+	fb.resize(drawable_size);
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
+	glBindFramebuffer(GL_FRAMEBUFFER, fb.objects_fb); // bind the objects (G-buffer) framebuffer as render target
 
-	scene.draw(*camera);
-	enemy_visible = true; // default
+	GLfloat zeros[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // helper clear color (all channels = 0)
+	glClearBufferfv(GL_COLOR, 0, zeros); // clear color attachment 0 (position texture) to zeros
+	glClearBufferfv(GL_COLOR, 1, zeros); // clear color attachment 1 (normal + roughness) to zeros
+	glClearBufferfv(GL_COLOR, 2, zeros); // clear color attachment 2 (albedo) to zeros
+	glClear(GL_DEPTH_BUFFER_BIT); // clear the shared depth buffer
 
-	
-	if (enemy) {
-		// Project enemy position to screen:
-		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-		glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
-		glm::vec3 e_world = world_from_enemy[3];
+	glDisable(GL_BLEND); // disable blending for the geometry pass
+	glEnable(GL_DEPTH_TEST); // enable depth testing so only nearest fragments write
+	glDepthFunc(GL_LEQUAL); // depth test: pass if incoming depth <= stored depth
 
-		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
-		if (clip.w > 0.0f) {
-			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
-			// Window coords (pixels):
-			float sx = (ndc.x * 0.5f + 0.5f) * drawable_size.x;
-			float sy = (ndc.y * 0.5f + 0.5f) * drawable_size.y;
-			float enemy_depth = ndc.z * 0.5f + 0.5f; // [0,1]
+	//draw objects to geometry framebuffers:
+	zoo_scene_deferred->draw(world_to_clip); // render scene into G-buffers using world->clip matrix
 
-			// Sample a small box around the enemy (e.g., ~20px radius):
-			const int radius = 20;
-			const int step   = 10;  // stride between samples
-			const float eps  = 1e-3f;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind framebuffer (return to default framebuffer)
 
-			int total = 0;
-			int occluded = 0;
+	GL_ERRORS(); // check for GL errors (helper macro)
 
-			for (int dy = -radius; dy <= radius; dy += step) {
-				for (int dx = -radius; dx <= radius; dx += step) {
-					int px = int(sx) + dx;
-					int py = int(sy) + dy;
-					if (px < 0 || py < 0 || px >= int(drawable_size.x) || py >= int(drawable_size.y)) continue;
+	//--- draw lights, reading geometry from framebuffer ---
 
-					float depth_sample = 1.0f;
-					glReadPixels(px, py, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth_sample);
+	glBindFramebuffer(GL_FRAMEBUFFER, fb.lights_fb); // bind lights framebuffer (output accumulation texture)
 
-					// If the sample depth is *in front of* the enemy (smaller), that point is blocked:
-					if (depth_sample + eps < enemy_depth) occluded++;
-					total++;
-				}
-			}
-			// "Fully blocked" ≈ all tested points occluded:
-			if (total > 0 && occluded == total) enemy_visible = false;
-		} else {
-			// behind camera
-			enemy_visible = false;
-		}
-	}
-	if (focus_mode && enemy && enemy_visible) {
-		// project enemy world position to clip space:
-		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set clear color for lights pass (transparent black)
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear both color and depth on lights framebuffer
+	glDisable(GL_DEPTH_TEST); // disable standard depth testing for light accumulation
+	glDepthFunc(GL_GREATER); // use reversed-depth test: pass if fragment depth > stored depth (used with front-face culling)
 
-		glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
-		glm::vec3 e_world = world_from_enemy[3];           // translation column
-		glm::vec4 e_clip  = clip_from_world * glm::vec4(e_world, 1.0f);
+	glCullFace(GL_FRONT); // cull front faces so we render back faces of light volumes
+	glEnable(GL_CULL_FACE); // enable face culling
 
-		if (e_clip.w > 0.0f) {
-			glm::vec3 e_ndc = glm::vec3(e_clip) / e_clip.w; // [-1,1] range
-			// set up 2D line drawer (same as your text HUD uses)
-			glDisable(GL_DEPTH_TEST);
-			float aspect = float(drawable_size.x) / float(drawable_size.y);
-			DrawLines lines(glm::mat4(
-				1.0f / aspect, 0.0f, 0.0f, 0.0f,
-				0.0f, 1.0f, 0.0f, 0.0f,
-				0.0f, 0.0f, 1.0f, 0.0f,
+	glEnable(GL_BLEND); // enable blending to accumulate light contributions
+	glBlendEquation(GL_FUNC_ADD); // blending operation: add src and dst
+	glBlendFunc(GL_ONE, GL_ONE); // additive blending: src*1 + dst*1
+	glDepthMask(GL_FALSE); // disable depth writes while accumulating lighting (keep depth buffer from changing)
+
+	//draw geometry for each light:
+	auto &prog = basic_material_deferred_light_program; // reference to the deferred-light shader wrapper
+	glUseProgram(prog->program); // bind the deferred-light shader program
+
+	glBindVertexArray(light_for_basic_material_deferred_light); // bind VAO containing the light-volume geometry
+
+	glActiveTexture(GL_TEXTURE0); // select texture unit 0
+	glBindTexture(GL_TEXTURE_2D, fb.position_tex); // bind world-space position G-buffer to unit 0
+	glActiveTexture(GL_TEXTURE1); // select texture unit 1
+	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex); // bind normal+roughness G-buffer to unit 1
+	glActiveTexture(GL_TEXTURE2); // select texture unit 2
+	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex); // bind albedo (color) G-buffer to unit 2
+
+	for (auto const &light : zoo_scene_deferred->lights) { // iterate over all lights in the scene
+		glm::mat4 light_to_world = light.transform->make_world_from_local(); // compute light's model-to-world transform
+
+		Mesh const *mesh = nullptr; // pointer to chosen light-volume mesh for this light
+
+		glUniform3fv(prog->EYE_vec3, 1, glm::value_ptr(eye)); // upload camera/eye position (in light-space)
+		glUniform3fv(prog->LIGHT_LOCATION_vec3, 1, glm::value_ptr(glm::vec3(light_to_world[3]))); // upload light position
+		glUniform3fv(prog->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(-light_to_world[2]))); // upload light direction (negated forward)
+		glUniform3fv(prog->LIGHT_ENERGY_vec3, 1, glm::value_ptr(light.energy)); // upload light energy/color
+		if (light.type == Scene::Light::Point) {
+			glUniform1i(prog->LIGHT_TYPE_int, 0); // tell shader this is a point light
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // cutoff not used for point here (set to 1)
+			mesh = &light_meshes->cube; // use cube mesh as bounding volume for point light
+			//when is energy / dis^2 < 1/256.0f?
+			float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // compute influence radius from energy
+			light_to_world = light_to_world * glm::mat4( // scale the light-volume by R
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
 				0.0f, 0.0f, 0.0f, 1.0f
-			));
-
-			// Convert NDC to the DrawLines' coords: x in [-aspect, aspect], y in [-1,1]
-			glm::vec3 p(e_ndc.x * aspect, e_ndc.y, 0.0f);
-
-			// crosshair size (in screen space units):
-			const float s = 0.05f;
-
-			// crosshair lines (black for visibility on white bg):
-			glm::u8vec4 col(0x00, 0x00, 0x00, 0xff);
-			lines.draw(p + glm::vec3(-s, 0.0f, 0.0f), p + glm::vec3(+s, 0.0f, 0.0f), col);
-			lines.draw(p + glm::vec3(0.0f, -s, 0.0f), p + glm::vec3(0.0f, +s, 0.0f), col);
-
-			// "ENEMY" label just above the crosshair:
-			const float H = 0.06f;
-			lines.draw_text("ENEMY",
-				p + glm::vec3(-0.5f * H, +1.4f * H, 0.0f),
-				glm::vec3(H, 0.0f, 0.0f),
-				glm::vec3(0.0f, H, 0.0f),
-				col
 			);
-			glEnable(GL_DEPTH_TEST);
+		} else if (light.type == Scene::Light::Hemisphere) {
+			glUniform1i(prog->LIGHT_TYPE_int, 1); // hemisphere light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
+			mesh = &light_meshes->everything; // full-screen geometry
+			float R = 1.0f; // radius unused/1
+			light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		} else if (light.type == Scene::Light::Spot) {
+			glUniform1i(prog->LIGHT_TYPE_int, 2); // spot light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, std::cos(0.5f * light.spot_fov)); // upload spot cutoff cosine
+			mesh = &light_meshes->cone; // use cone mesh for spot volume
+			float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // estimate radius from energy
+			//HACK: hard-limit to 5 units:
+			R = 5.0f; // clamp radius to 5 to avoid huge cones
+			float C = std::tan(0.5f * light.spot_fov); // cone radius factor from FOV
+			light_to_world = light_to_world * glm::mat4( // scale cone by C*R (x/y) and R (z)
+				C*R, 0.0f, 0.0f, 0.0f,
+				0.0f, C*R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		} else if (light.type == Scene::Light::Directional) {
+			glUniform1i(prog->LIGHT_TYPE_int, 3); // directional light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
+			mesh = &light_meshes->everything; // full-screen geometry for directional
+			float R = 1.0f; // unused scale
+			light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		}
+		glUniformMatrix4fv(prog->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(world_to_clip * light_to_world)); // upload light-volume transform to clip space
+
+		if (mesh && mesh->count) { // if we have geometry, draw the light volume
+			glDrawArrays(mesh->type, mesh->start, mesh->count); // render light-volume; shader reads G-buffers to accumulate lighting
 		}
 	}
-	if (focus_mode && enemy) {
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
 
-		// bar geometry (screen space): centered, near bottom
-		const float bar_w = 1.6f;     // total width
-		const float bar_h = 0.08f;    // height
-		const float y     = -0.90f;   // vertical position
-		const float x0    = -0.5f * bar_w;
-		const float x1    =  0.5f * bar_w;
-		const float y0    = y;
-		const float y1    = y + bar_h;
+	glActiveTexture(GL_TEXTURE2); // restore texture unit 2
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 2
+	glActiveTexture(GL_TEXTURE1); // restore texture unit 1
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 1
+	glActiveTexture(GL_TEXTURE0); // restore texture unit 0
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 0
 
-		// outline (light gray)
-		glm::u8vec4 outline(0xcc, 0xcc, 0xcc, 0xff);
-		lines.draw(glm::vec3(x0, y0, 0.0f), glm::vec3(x1, y0, 0.0f), outline);
-		lines.draw(glm::vec3(x1, y0, 0.0f), glm::vec3(x1, y1, 0.0f), outline);
-		lines.draw(glm::vec3(x1, y1, 0.0f), glm::vec3(x0, y1, 0.0f), outline);
-		lines.draw(glm::vec3(x0, y1, 0.0f), glm::vec3(x0, y0, 0.0f), outline);
+	glBindVertexArray(0); // unbind VAO
 
-		// background (empty) – thin gray center line just for context (optional)
-		glm::u8vec4 back(0x55, 0x55, 0x55, 0xff);
-		lines.draw(glm::vec3(x0, (y0+y1)*0.5f, 0.0f), glm::vec3(x1, (y0+y1)*0.5f, 0.0f), back);
+	glDepthMask(GL_TRUE); // re-enable depth writes
 
-		// FILLED BLACK RECTANGLE that grows with stalk_charge:
-		const float fill_x = x0 + (x1 - x0) * stalk_charge;
-		glm::u8vec4 black(0x00, 0x00, 0x00, 0xff);
+	glDisable(GL_CULL_FACE); // disable face culling
 
-		// scan-fill using horizontal lines
-		const int stripes = 48; // more = more solid-looking fill
-		for (int i = 0; i < stripes; ++i) {
-			float t0 = float(i) / stripes;
-			float y_line = y0 + t0 * bar_h;
-			lines.draw(glm::vec3(x0,    y_line, 0.0f),
-					glm::vec3(fill_x, y_line, 0.0f),
-					black);
-		}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind any framebuffer (back to default)
 
-		// label
-		const float H = 0.06f;
-		lines.draw_text("STALK",
-			glm::vec3(x0, y1 + 0.02f, 0.0f),
-			glm::vec3(H, 0.0f, 0.0f),
-			glm::vec3(0.0f, H, 0.0f),
-			outline
-		);
+	GL_ERRORS(); // debug check for GL errors
 
-		glEnable(GL_DEPTH_TEST);
-	}
+	//--- copy lights fb info to screen ---
 	
-	if (being_watched) {
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
-		// Centered-ish: start slightly left of (0,0)
-		constexpr float H = 0.14f; // text size
-		glm::u8vec4 warn = glm::u8vec4(0xff, 0x40, 0x40, 0xff);
-		lines.draw_text("You are being watched!",
-			glm::vec3(-0.55f, 0.02f, 0.0f),   // tweak to taste for centering
-			glm::vec3(H, 0.0f, 0.0f),         // x step
-			glm::vec3(0.0f, H, 0.0f),         // y step
-			warn
-		);
-		glEnable(GL_DEPTH_TEST);
-	}
-	
-	if (game_over) {
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
-		constexpr float H = 0.18f; // slightly larger text
-		glm::u8vec4 color = glm::u8vec4(0xff, 0x00, 0x00, 0xff); // bright red
-		lines.draw_text("Zoo has been locked",
-			glm::vec3(-0.7f, 0.0f, 0.0f),  // centered-ish position
-			glm::vec3(H, 0.0f, 0.0f),
-			glm::vec3(0.0f, H, 0.0f),
-			color
-		);
-		glEnable(GL_DEPTH_TEST);
-	}
-	{ //use DrawLines to overlay some text:
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
+	glClearColor(0.2f, 0.2f, 0.2f, 0.0f);  // Set background to dark gray
+	glClear(GL_COLOR_BUFFER_BIT);           // Clear the color buffer with the background color
 
-		constexpr float H = 0.09f;
-		lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks...",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks...",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
-	}
 	GL_ERRORS();
+	glDisable(GL_BLEND);                    // Disable blending as we're doing a straight copy
+	glDisable(GL_DEPTH_TEST);               // Disable depth testing as we're drawing a full-screen quad
+	GL_ERRORS();
+
+	glBindVertexArray(empty_vao);           // Bind the empty VAO for full-screen quad rendering
+	glUseProgram(copy_to_screen_program->program);  // Use the program that copies textures to screen
+
+	glActiveTexture(GL_TEXTURE0);           // Activate the first texture unit
+	glBindTexture(GL_TEXTURE_2D, fb.output_tex);  // Show final lighting result
+
+	// if (show == ShowOutput) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.output_tex);  // Show final lighting result
+	// } else if (show == ShowPosition) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.position_tex);  // Show world-space positions
+	// } else if (show == ShowNormalRoughness) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex);  // Show normals and roughness
+	// } else if (show == ShowAlbedo) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex);  // Show surface colors and textures
+	// }
+
+	GL_ERRORS();
+	glDrawArrays(GL_TRIANGLES, 0, 3);       // Draw full-screen triangle (efficient full-screen quad)
+	GL_ERRORS();
+
+	glActiveTexture(GL_TEXTURE0);           // Reset active texture unit
+	glBindTexture(GL_TEXTURE_2D, 0);        // Unbind texture
+
+	glBindVertexArray(0);                   // Unbind VAO
+	glUseProgram(0);                        // Unbind shader program
+
+	// //--- stalking mechanics ---
+	// if (focus_mode) {
+	// 	glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // stark white background for high contrast
+	// } else {
+	// 	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+	// }
+	// glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
+	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// glEnable(GL_DEPTH_TEST);
+	// glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
+
+	// scene.draw(*camera);
+	// enemy_visible = true; // default
+
+	
+	// if (enemy) {
+	// 	// Project enemy position to screen:
+	// 	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	// 	glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
+	// 	glm::vec3 e_world = world_from_enemy[3];
+
+	// 	glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
+	// 	if (clip.w > 0.0f) {
+	// 		glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
+	// 		// Window coords (pixels):
+	// 		float sx = (ndc.x * 0.5f + 0.5f) * drawable_size.x;
+	// 		float sy = (ndc.y * 0.5f + 0.5f) * drawable_size.y;
+	// 		float enemy_depth = ndc.z * 0.5f + 0.5f; // [0,1]
+
+	// 		// Sample a small box around the enemy (e.g., ~20px radius):
+	// 		const int radius = 20;
+	// 		const int step   = 10;  // stride between samples
+	// 		const float eps  = 1e-3f;
+
+	// 		int total = 0;
+	// 		int occluded = 0;
+
+	// 		for (int dy = -radius; dy <= radius; dy += step) {
+	// 			for (int dx = -radius; dx <= radius; dx += step) {
+	// 				int px = int(sx) + dx;
+	// 				int py = int(sy) + dy;
+	// 				if (px < 0 || py < 0 || px >= int(drawable_size.x) || py >= int(drawable_size.y)) continue;
+
+	// 				float depth_sample = 1.0f;
+	// 				glReadPixels(px, py, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth_sample);
+
+	// 				// If the sample depth is *in front of* the enemy (smaller), that point is blocked:
+	// 				if (depth_sample + eps < enemy_depth) occluded++;
+	// 				total++;
+	// 			}
+	// 		}
+	// 		// "Fully blocked" ≈ all tested points occluded:
+	// 		if (total > 0 && occluded == total) enemy_visible = false;
+	// 	} else {
+	// 		// behind camera
+	// 		enemy_visible = false;
+	// 	}
+	// }
+	// if (focus_mode && enemy && enemy_visible) {
+	// 	// project enemy world position to clip space:
+	// 	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+	// 	glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
+	// 	glm::vec3 e_world = world_from_enemy[3];           // translation column
+	// 	glm::vec4 e_clip  = clip_from_world * glm::vec4(e_world, 1.0f);
+
+	// 	if (e_clip.w > 0.0f) {
+	// 		glm::vec3 e_ndc = glm::vec3(e_clip) / e_clip.w; // [-1,1] range
+	// 		// set up 2D line drawer (same as your text HUD uses)
+	// 		glDisable(GL_DEPTH_TEST);
+	// 		float aspect = float(drawable_size.x) / float(drawable_size.y);
+	// 		DrawLines lines(glm::mat4(
+	// 			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+	// 			0.0f, 1.0f, 0.0f, 0.0f,
+	// 			0.0f, 0.0f, 1.0f, 0.0f,
+	// 			0.0f, 0.0f, 0.0f, 1.0f
+	// 		));
+
+	// 		// Convert NDC to the DrawLines' coords: x in [-aspect, aspect], y in [-1,1]
+	// 		glm::vec3 p(e_ndc.x * aspect, e_ndc.y, 0.0f);
+
+	// 		// crosshair size (in screen space units):
+	// 		const float s = 0.05f;
+
+	// 		// crosshair lines (black for visibility on white bg):
+	// 		glm::u8vec4 col(0x00, 0x00, 0x00, 0xff);
+	// 		lines.draw(p + glm::vec3(-s, 0.0f, 0.0f), p + glm::vec3(+s, 0.0f, 0.0f), col);
+	// 		lines.draw(p + glm::vec3(0.0f, -s, 0.0f), p + glm::vec3(0.0f, +s, 0.0f), col);
+
+	// 		// "ENEMY" label just above the crosshair:
+	// 		const float H = 0.06f;
+	// 		lines.draw_text("ENEMY",
+	// 			p + glm::vec3(-0.5f * H, +1.4f * H, 0.0f),
+	// 			glm::vec3(H, 0.0f, 0.0f),
+	// 			glm::vec3(0.0f, H, 0.0f),
+	// 			col
+	// 		);
+	// 		glEnable(GL_DEPTH_TEST);
+	// 	}
+	// }
+	// if (focus_mode && enemy) {
+	// 	glDisable(GL_DEPTH_TEST);
+	// 	float aspect = float(drawable_size.x) / float(drawable_size.y);
+	// 	DrawLines lines(glm::mat4(
+	// 		1.0f / aspect, 0.0f, 0.0f, 0.0f,
+	// 		0.0f, 1.0f, 0.0f, 0.0f,
+	// 		0.0f, 0.0f, 1.0f, 0.0f,
+	// 		0.0f, 0.0f, 0.0f, 1.0f
+	// 	));
+
+	// 	// bar geometry (screen space): centered, near bottom
+	// 	const float bar_w = 1.6f;     // total width
+	// 	const float bar_h = 0.08f;    // height
+	// 	const float y     = -0.90f;   // vertical position
+	// 	const float x0    = -0.5f * bar_w;
+	// 	const float x1    =  0.5f * bar_w;
+	// 	const float y0    = y;
+	// 	const float y1    = y + bar_h;
+
+	// 	// outline (light gray)
+	// 	glm::u8vec4 outline(0xcc, 0xcc, 0xcc, 0xff);
+	// 	lines.draw(glm::vec3(x0, y0, 0.0f), glm::vec3(x1, y0, 0.0f), outline);
+	// 	lines.draw(glm::vec3(x1, y0, 0.0f), glm::vec3(x1, y1, 0.0f), outline);
+	// 	lines.draw(glm::vec3(x1, y1, 0.0f), glm::vec3(x0, y1, 0.0f), outline);
+	// 	lines.draw(glm::vec3(x0, y1, 0.0f), glm::vec3(x0, y0, 0.0f), outline);
+
+	// 	// background (empty) – thin gray center line just for context (optional)
+	// 	glm::u8vec4 back(0x55, 0x55, 0x55, 0xff);
+	// 	lines.draw(glm::vec3(x0, (y0+y1)*0.5f, 0.0f), glm::vec3(x1, (y0+y1)*0.5f, 0.0f), back);
+
+	// 	// FILLED BLACK RECTANGLE that grows with stalk_charge:
+	// 	const float fill_x = x0 + (x1 - x0) * stalk_charge;
+	// 	glm::u8vec4 black(0x00, 0x00, 0x00, 0xff);
+
+	// 	// scan-fill using horizontal lines
+	// 	const int stripes = 48; // more = more solid-looking fill
+	// 	for (int i = 0; i < stripes; ++i) {
+	// 		float t0 = float(i) / stripes;
+	// 		float y_line = y0 + t0 * bar_h;
+	// 		lines.draw(glm::vec3(x0,    y_line, 0.0f),
+	// 				glm::vec3(fill_x, y_line, 0.0f),
+	// 				black);
+	// 	}
+
+	// 	// label
+	// 	const float H = 0.06f;
+	// 	lines.draw_text("STALK",
+	// 		glm::vec3(x0, y1 + 0.02f, 0.0f),
+	// 		glm::vec3(H, 0.0f, 0.0f),
+	// 		glm::vec3(0.0f, H, 0.0f),
+	// 		outline
+	// 	);
+
+	// 	glEnable(GL_DEPTH_TEST);
+	// }
+	
+	// if (being_watched) {
+	// 	glDisable(GL_DEPTH_TEST);
+	// 	float aspect = float(drawable_size.x) / float(drawable_size.y);
+	// 	DrawLines lines(glm::mat4(
+	// 		1.0f / aspect, 0.0f, 0.0f, 0.0f,
+	// 		0.0f, 1.0f, 0.0f, 0.0f,
+	// 		0.0f, 0.0f, 1.0f, 0.0f,
+	// 		0.0f, 0.0f, 0.0f, 1.0f
+	// 	));
+	// 	// Centered-ish: start slightly left of (0,0)
+	// 	constexpr float H = 0.14f; // text size
+	// 	glm::u8vec4 warn = glm::u8vec4(0xff, 0x40, 0x40, 0xff);
+	// 	lines.draw_text("You are being watched!",
+	// 		glm::vec3(-0.55f, 0.02f, 0.0f),   // tweak to taste for centering
+	// 		glm::vec3(H, 0.0f, 0.0f),         // x step
+	// 		glm::vec3(0.0f, H, 0.0f),         // y step
+	// 		warn
+	// 	);
+	// 	glEnable(GL_DEPTH_TEST);
+	// }
+	
+	// if (game_over) {
+	// 	glDisable(GL_DEPTH_TEST);
+	// 	float aspect = float(drawable_size.x) / float(drawable_size.y);
+	// 	DrawLines lines(glm::mat4(
+	// 		1.0f / aspect, 0.0f, 0.0f, 0.0f,
+	// 		0.0f, 1.0f, 0.0f, 0.0f,
+	// 		0.0f, 0.0f, 1.0f, 0.0f,
+	// 		0.0f, 0.0f, 0.0f, 1.0f
+	// 	));
+	// 	constexpr float H = 0.18f; // slightly larger text
+	// 	glm::u8vec4 color = glm::u8vec4(0xff, 0x00, 0x00, 0xff); // bright red
+	// 	lines.draw_text("Zoo has been locked",
+	// 		glm::vec3(-0.7f, 0.0f, 0.0f),  // centered-ish position
+	// 		glm::vec3(H, 0.0f, 0.0f),
+	// 		glm::vec3(0.0f, H, 0.0f),
+	// 		color
+	// 	);
+	// 	glEnable(GL_DEPTH_TEST);
+	// }
+	// { //use DrawLines to overlay some text:
+	// 	glDisable(GL_DEPTH_TEST);
+	// 	float aspect = float(drawable_size.x) / float(drawable_size.y);
+	// 	DrawLines lines(glm::mat4(
+	// 		1.0f / aspect, 0.0f, 0.0f, 0.0f,
+	// 		0.0f, 1.0f, 0.0f, 0.0f,
+	// 		0.0f, 0.0f, 1.0f, 0.0f,
+	// 		0.0f, 0.0f, 0.0f, 1.0f
+	// 	));
+
+	// 	constexpr float H = 0.09f;
+	// 	lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks...",
+	// 		glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+	// 		glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+	// 		glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+	// 	float ofs = 2.0f / drawable_size.y;
+	// 	lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks...",
+	// 		glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
+	// 		glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+	// 		glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+	// }
+	// GL_ERRORS();
 }
