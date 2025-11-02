@@ -124,7 +124,7 @@ void print_4x4(std::string title, glm::mat4 mat) {
         std::cout << mat[j][0]<< ", " << mat[j][1] << ", " << mat[j][2] << ", " << mat[j][3] << std::endl; 
     }
 }
-const Skeleton::Pose Skeleton::pose(const std::map< std::string, BoneTransform > &pose_data) const {
+const Skeleton::Pose Skeleton::pose(const std::vector< BoneTransform > &pose_data) const {
     if (index_to_name.size() != pose_data.size()) {
         std::cerr << "WARNING: pose information must be specified for every bone in order" << std::endl;
         return {};
@@ -134,28 +134,33 @@ const Skeleton::Pose Skeleton::pose(const std::map< std::string, BoneTransform >
         return {};
     } 
 
-    Pose skel_from_pose(bones.size());
-    for (uint32_t i = 0; i < index_to_name.size(); ++i) {
+    std::vector < glm::mat4 > skel_from_pose(bones.size());
+    for (int32_t i = 0; i < index_to_name.size(); ++i) {
         const Bone &bone = bones[i];
-        std::string bone_name = index_to_name[i];
         assert(bone.parent <= i);
 
-        glm::mat4 T = glm::translate(glm::mat4(1.f), pose_data.at(bone_name).position);
-        glm::mat4 R = glm::mat4_cast(pose_data.at(bone_name).rotation);
-        glm::mat4 S = glm::scale(glm::mat4(1.f), pose_data.at(bone_name).scale);
+        glm::mat4 T = glm::translate(glm::mat4(1.f), pose_data[i].position);
+        glm::mat4 R = glm::mat4_cast(pose_data[i].rotation);
+        glm::mat4 S = glm::scale(glm::mat4(1.f), pose_data[i].scale);
 
         glm::mat4 P = T*R*S;
 
-        //blender matrix defs kinda suck - https://blender.stackexchange.com/questions/44637/how-can-i-manually-calculate-bpy-types-posebone-matrix-using-blenders-python-ap
-        if (bone.parent == i)
+        if (bone.parent == -1) {
             skel_from_pose[i] = bone.bind*P;
-        else 
+        }
+        else {
             skel_from_pose[i] = skel_from_pose[bone.parent]*bones[bone.parent].inverse_bind*bone.bind*P;
+        }
     }
 
-    return skel_from_pose;
+    std::vector < glm::mat4x3 > res(bones.size());
+    for (int32_t i = 0; i < index_to_name.size(); ++i) {
+        res[i] = glm::mat4x3(skel_from_pose[i] * bones[i].inverse_bind);
+    }
+    return res;
 }
 
+/*
 const std::vector< DynamicMeshBuffer::Vertex > Skeleton::skin(Skeleton::Pose &pose, const RiggedMesh &mesh) const {
     assert(mesh.groups.size() == mesh.vertices.size());
     std::vector< DynamicMeshBuffer::Vertex > res(mesh.vertices.size());
@@ -165,6 +170,7 @@ const std::vector< DynamicMeshBuffer::Vertex > Skeleton::skin(Skeleton::Pose &po
         glm::vec4 norm = glm::vec4(0.f);
         
         glm::vec4 v_skel = skel_from_world * mesh.world_from_mesh * glm::vec4(mesh.vertices[i].Position, 1.f);
+        glm::vec4 n_skel = skel_from_world * mesh.world_from_mesh * glm::vec4(mesh.vertices[i].Normal, 0.f);
         for (size_t g = 0; g < mesh.groups[i].size(); ++g) {
             const Bone &bone = get_bone(mesh.groups[i][g].name);
             glm::mat4 P = pose[name_to_index.at(mesh.groups[i][g].name)];
@@ -172,14 +178,15 @@ const std::vector< DynamicMeshBuffer::Vertex > Skeleton::skin(Skeleton::Pose &po
 
             float w = mesh.groups[i][g].weight;
             pos += w * P * bone.inverse_bind * v_skel;
-            norm += w * glm::transpose(glm::inverse(P * bone.inverse_bind)) * glm::vec4(mesh.vertices[i].Normal, 0.f);
+            norm += w * glm::transpose(glm::inverse(P * bone.inverse_bind)) * n_skel;
         }
 
         res[i].Position = glm::vec3(mesh.mesh_from_world * world_from_skel * pos);
-        res[i].Normal = glm::normalize(norm); //glm::normalize(norm);
+        res[i].Normal = glm::normalize(norm);
         res[i].Color = mesh.vertices[i].Color;
         res[i].TexCoord = mesh.vertices[i].TexCoord;
     }
 
     return res;
 }
+*/

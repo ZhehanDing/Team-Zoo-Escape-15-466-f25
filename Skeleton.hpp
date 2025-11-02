@@ -1,13 +1,11 @@
 #pragma once
-#define GLM_FORCE_PACKED
+
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <map>
 #include <string>
 #include <vector>
 #include <span>
-
-#include "RiggedMesh.hpp"
 
 // Structured and inspired by Mesh.hpp/cpp
 struct Skeleton {
@@ -19,7 +17,7 @@ struct Skeleton {
     static_assert(sizeof(BoneTransform) == 4*4+4*3+4*3);
 
     struct Bone {
-        uint32_t parent;
+        int32_t parent;
         glm::mat4 inverse_bind;
         glm::mat4 bind;
     };
@@ -34,11 +32,10 @@ struct Skeleton {
     const Bone &get_bone(uint32_t index) const;
 
 
-    typedef std::vector< glm::mat4 > Rest;
-    typedef std::vector< glm::mat4 > Pose;
+    typedef std::vector< glm::mat4x3 > Pose;
 
-    const Pose pose(const std::map< std::string, BoneTransform > &pose_data) const;
-    const std::vector< DynamicMeshBuffer::Vertex > skin(Pose &pose, const RiggedMesh &mesh) const;
+    const Pose pose(const std::vector< BoneTransform > &pose_data) const;
+    //const std::vector< Vertex > skin(Pose &pose, const RiggedMesh &mesh) const;
 
     // -- internals --
     std::vector< std::string > index_to_name;

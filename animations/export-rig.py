@@ -26,7 +26,6 @@ m = re.match(r'^(.*):([^:]+)$', infile)
 if m:
 	infile = m.group(1)
 	collection_name = m.group(2)
-
 outfiles = args[1:3]
 
 for outfile in outfiles:
@@ -91,7 +90,7 @@ add_armatures(collection)
 assert(len(to_write) == 1)
 add_actions()
 
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Matrix
 def matrix_to_bytes(mat : Matrix, dim : tuple[int, int], order : str = 'c'):
 	if order != 'r' and order != 'c':
 		raise ValueError('Incorrect order ' + order + ". Please specify row-order 'r' or col-order 'c'.")
@@ -189,7 +188,7 @@ def write_skeleton(obj : bpy.types.Object, outfile):
 	for i in range(bone_count):
 		bone = bones[i]
 
-		parent = bone_indices[bone.parent.name] if bone.parent else bone_indices[bone.name] # self if no parent
+		parent = bone_indices[bone.parent.name] if bone.parent else -1 # self if no parent
 		assert(parent <= i)
 
 		index1 += struct.pack('I', len(strings))
@@ -197,7 +196,7 @@ def write_skeleton(obj : bpy.types.Object, outfile):
 		index1 += struct.pack('I', len(strings))
 
 		# pack bone parent index
-		local_data += struct.pack('I', parent)
+		local_data += struct.pack('i', parent)
 		
 		local_data += matrix_to_bytes(bone.matrix_local.inverted(), (4,4))
 		local_data += matrix_to_bytes(bone.matrix_local, (4,4))
@@ -276,7 +275,6 @@ def write_animations(obj : bpy.types.Object, outfile):
 	armature.pose_position = 'POSE'
 
 	pose_bones = topological_sort(obj.pose.bones)
-	bones = topological_sort(obj.data.bones)
 	actor_count = len(pose_bones)
 	
 	keyframe_total = 0

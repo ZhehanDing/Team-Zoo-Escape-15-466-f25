@@ -5,6 +5,7 @@
 #include "DrawLines.hpp"
 #include "Mesh.hpp"
 #include "RiggedMesh.hpp"
+#include "SkinningProgram.hpp"
 #include "Load.hpp"
 #include "gl_errors.hpp"
 #include "data_path.hpp"
@@ -14,16 +15,17 @@
 #include <random>
 
 GLuint meshes_for_lit_color_texture_program = 0;
-GLuint joints_meshes_for_lit_color_texture_program = 0;
-GLuint surface_meshes_for_lit_color_texture_program = 0;
 
-/*
 Load< MeshBuffer > meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("test.pnct"));
 	meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
 	return ret;
 });
-*/
+
+Load< BoneInfluenceBuffer > bone_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
+	BoneInfluenceBuffer const *ret = new BoneInfluenceBuffer(data_path("test.infl"));
+	return ret;
+});
 
 Load< SkeletonBuffer > skeletons(LoadTagDefault, []() -> SkeletonBuffer const * {
 	SkeletonBuffer const *ret = new SkeletonBuffer(data_path("../animations/test.skel"));
@@ -35,27 +37,24 @@ Load< AnimationBuffer< Skeleton::BoneTransform > > animations(LoadTagDefault, []
 	return ret;
 });
 
-DynamicMeshBuffer *joints;
-DynamicMeshBuffer *surface;
-Load< RiggedMeshBuffer > rigged_meshes(LoadTagDefault, []() -> RiggedMeshBuffer const * {
-	RiggedMeshBuffer const *ret = new RiggedMeshBuffer(data_path("test.pnct"));
-	joints = new DynamicMeshBuffer();
-	surface = new DynamicMeshBuffer();
-	joints_meshes_for_lit_color_texture_program = joints->make_vao_for_program(lit_color_texture_program->program);
-	surface_meshes_for_lit_color_texture_program = surface->make_vao_for_program(lit_color_texture_program->program);
-	return ret;
-});
-
-Scene::Transform *base = nullptr;
+Scene::Transform *joints_transform;
+Scene::Transform *surface_transform;
+std::vector < Collider > colliders;
 Load< Scene > test_scene(LoadTagDefault, []() -> Scene const * {
 	return new Scene(data_path("test.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		RiggedMesh const &mesh = rigged_meshes->lookup(mesh_name);
+		if (mesh_name == "Beta_Surface") {
+			surface_transform = transform;
+		}
+		else if (mesh_name == "Beta_Joints") {
+			joints_transform = transform;
+		}
+		/*
+		Mesh const &mesh = meshes->lookup(mesh_name);
 		scene.drawables.emplace_back(transform);
+		colliders.emplace_back(Collider(transform));
+		colliders.back().set_bounds(mesh.min, mesh.max);
 		Scene::Drawable &drawable = scene.drawables.back();
 
-		if (mesh_name == "Beta_Surface") {
-			base = transform;
-		}
 		if (scene.drawables.size() == 2) {
 			Scene::Drawable &front = scene.drawables.front();
 			Scene::Drawable &back = scene.drawables.back();
@@ -66,14 +65,13 @@ Load< Scene > test_scene(LoadTagDefault, []() -> Scene const * {
 			else {
 				back.transform->parent = front.transform;
 			}
-			
 		}
 		drawable.pipeline = lit_color_texture_program_pipeline;
 
-		drawable.pipeline.vao = mesh_name == "Beta_Joints" ? joints_meshes_for_lit_color_texture_program : surface_meshes_for_lit_color_texture_program;
-		drawable.pipeline.type = GL_TRIANGLES;
-		drawable.pipeline.start = 0;
-		drawable.pipeline.count = (GLuint) mesh.vertices.size();
+		drawable.pipeline.vao = meshes_for_lit_color_texture_program;
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;*/
 	});
 });
 
@@ -96,7 +94,10 @@ auto g = [](const Skeleton::BoneTransform &a, const Skeleton::BoneTransform &b, 
 AnimationGraph < Skeleton::BoneTransform > rig_graph = AnimationGraph< Skeleton::BoneTransform >(g);
 
 
-const Skeleton *skeleton;
+RiggedMesh *joints;
+RiggedMesh *surface;
+Scene::Drawable *joints_drawable;
+Scene::Drawable *surface_drawable;
 PlayMode::PlayMode() : scene(*test_scene) {
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -107,8 +108,8 @@ PlayMode::PlayMode() : scene(*test_scene) {
 		camera->transform->parent = &player.transform;
 	}
 
-	move_x_anim.add_keyframes({ glm::vec3(-10.f, 0.f, 0.f), glm::vec3(10.f, 0.f, 0.f), glm::vec3(-10.f, 0.f, 0.f) }, { 0.f, 5.f, 10.f }, { "position" });
-	move_y_anim.add_keyframes({ glm::vec3(0.f, -10.f, 0.f), glm::vec3(0.f, 10.f, 0.f), glm::vec3(0.f, -10.f, 0.f) }, { 0.f, 5.f, 10.f }, { "position" });
+	move_x_anim.add_keyframes({ glm::vec3(-100.f, 0.f, 0.f), glm::vec3(100.f, 0.f, 0.f), glm::vec3(-100.f, 0.f, 0.f) }, { 0.f, 5.f, 10.f }, { "position" });
+	move_y_anim.add_keyframes({ glm::vec3(0.f, -100.f, 0.f), glm::vec3(0.f, 100.f, 0.f), glm::vec3(0.f, -100.f, 0.f) }, { 0.f, 5.f, 10.f }, { "position" });
 	graph.add_state(move_x_anim);
 	graph.add_state(move_y_anim);
 
@@ -130,7 +131,28 @@ PlayMode::PlayMode() : scene(*test_scene) {
 		return two.pressed != 0;
 	}, "Dance"));
 
-	skeleton = &skeletons->lookup("Armature");
+	joints = new RiggedMesh(meshes->buffer, bone_infls->buffer, meshes->lookup("Beta_Joints"), skeletons->lookup("Armature"), &rig_graph);
+	surface = new RiggedMesh(meshes->buffer, bone_infls->buffer, meshes->lookup("Beta_Surface"), skeletons->lookup("Armature"), &rig_graph);
+	
+	scene.drawables.emplace_back(joints_transform);
+	joints_drawable = &scene.drawables.back();
+	joints_drawable->pipeline = skinning_program_pipeline;
+	joints_drawable->pipeline.vao = joints->make_vao_for_program(skinning_program->program);
+	joints_drawable->pipeline.type = joints->mesh.type;
+	joints_drawable->pipeline.start = joints->mesh.start;
+	joints_drawable->pipeline.count = joints->mesh.count;
+
+	scene.drawables.emplace_back(surface_transform);
+	surface_drawable = &scene.drawables.back();
+
+	surface_drawable->pipeline = skinning_program_pipeline;
+	surface_drawable->pipeline.vao = surface->make_vao_for_program(skinning_program->program);
+	surface_drawable->pipeline.type = surface->mesh.type;
+	surface_drawable->pipeline.start = surface->mesh.start;
+	surface_drawable->pipeline.count = surface->mesh.count;
+
+	//joints->bind(bone_infls->lookup("Beta_Joints"));
+	//surface->bind(bone_infls->lookup("Beta_Surface"));
 }
 
 PlayMode::~PlayMode() {
@@ -170,8 +192,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			one.downs = 1;
 			one.pressed = true;
 			return true;
-		} 
-		else if (evt.key.key == SDLK_2) {
+		} else if (evt.key.key == SDLK_2) {
 			two.downs = 1;
 			two.pressed = true;
 			return true;
@@ -201,8 +222,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		} else if (evt.key.key == SDLK_1) {
 			one.pressed = false;
 			return true;
-		} 
-		else if (evt.key.key == SDLK_2) {
+		} else if (evt.key.key == SDLK_2) {
 			two.pressed = false;
 			return true;
 		}
@@ -235,17 +255,18 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
-	auto rig_res = rig_graph.sample(); 
-	auto pose = skeleton->pose(rig_res);
-	auto vertices_surface = skeleton->skin(pose, rigged_meshes->lookup("Beta_Surface"));
-	auto vertices_joints = skeleton->skin(pose, rigged_meshes->lookup("Beta_Joints"));
-	surface->set(vertices_surface, GL_DYNAMIC_DRAW);
-	joints->set(vertices_joints, GL_DYNAMIC_DRAW);
  	rig_graph.update(elapsed);
-
-	auto sampled_position = graph.sample();
-	base->position = sampled_position.at("position");
+	joints->update(elapsed);
+	surface->update(elapsed);
+ 
 	graph.update(elapsed);
+
+	joints_drawable->transform->position = graph.sample()[0];
+	surface_drawable->transform->position = graph.sample()[0];
+
+	//auto sampled_position = graph.sample();
+	//base->transform->position = sampled_position.at("position");
+	//graph.update(elapsed);
 
 	{ //update listener to camera position:
 		glm::mat4x3 frame = camera->transform->make_parent_from_local();
@@ -314,6 +335,12 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.f, 1.f, 1.0f)));
 	glUseProgram(0);
 
+	glUseProgram(skinning_program->program);
+	glUniform1i(skinning_program->LIGHT_TYPE_int, 1);
+	glUniform3fv(skinning_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
+	glUniform3fv(skinning_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.f, 1.f, 1.0f)));
+	glUseProgram(0);
+
 	glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
 	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -344,13 +371,11 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3(H * .9f, 0.0f, 0.0f), glm::vec3(0.0f, H * .9f, 0.0f),
 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
 */
-/*
 		// world drawing for physics debugging.
 		DrawLines world(glm::mat3x4(camera->make_projection()) * camera->transform->make_local_from_world());
-		for (Collider *col : colliders) {
-			world.draw_box(col->get_transformation_matrix(), glm::u8vec4(255, 0, 0, 255));
+		for (Collider col : colliders) {
+			world.draw_box(col.make_world_from_local(), glm::u8vec4(255, 0, 0, 255));
 		}
-*/
 	}
 	GL_ERRORS();
 }

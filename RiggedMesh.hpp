@@ -1,14 +1,5 @@
 #pragma once
 
-/*
- * In this code, "Mesh" is a range of vertices that should be sent through
- *  the OpenGL pipeline together.
- * A "MeshBuffer" holds a collection of such meshes (loaded from a file) in
- *  a single OpenGL array buffer. Individual meshes can be looked up by name
- *  using the MeshBuffer::lookup() function.
- *
- */
-
 #include "GL.hpp"
 #include <glm/glm.hpp>
 #include <map>
@@ -16,49 +7,89 @@
 #include <string>
 #include <vector>
 
-#include "DynamicMeshBuffer.hpp"
+#include "Mesh.hpp"
+#include "Skeleton.hpp"
+#include "Animation.hpp"
 
-struct VertexGroup {
-	std::string name;
-	float weight;
+struct Vertex {
+	glm::vec3 Position;
+	glm::vec3 Normal;
+	glm::u8vec4 Color;
+	glm::vec2 TexCoord;
 };
+static_assert(sizeof(Vertex) == 4*3+4*3+4+4*2);
 
-struct VertexGroupIndex {
-	uint32_t begin;
-	uint32_t end;
+struct BoneInfluence {
+	// per provided 15466 BoneAnimation, vertex only influenced by at most 4 bones
+	// -- easier to push fixed than varying amt of bone influences to gpu
+	glm::uvec4 BoneIndices;
+	glm::vec4 BoneWeights; 
 };
-static_assert(sizeof(VertexGroupIndex) == 8);
+static_assert(sizeof(BoneInfluence) == (4+4)*4);
 
-struct RiggedMesh {
-	//Meshes are vertex ranges (and primitive types) in their MeshBuffer:
-
-	std::vector< DynamicMeshBuffer::Vertex > vertices;
-	std::vector< std::vector< VertexGroup > > groups;
-
-	glm::mat4 mesh_from_world;
-	glm::mat4 world_from_mesh;
-
-	//Bounding box.
-	//useful for debug visualization and (perhaps, eventually) collision detection:
-	glm::vec3 min = glm::vec3( std::numeric_limits< float >::infinity());
-	glm::vec3 max = glm::vec3(-std::numeric_limits< float >::infinity());
-};
-
-struct RiggedMeshBuffer {
+// start and count of group influences are exactly those given by a mesh.
+// in other words, one can optionally use a mesh's vertex group influences, 
+// but group influences should not be used without the corresponding mesh
+struct BoneInfluenceBuffer {
 	//construct from a file:
 	// note: will throw if file fails to read.
-	RiggedMeshBuffer(std::string const &filename);
+	BoneInfluenceBuffer(std::string const &filename);
 
 	//look up a particular mesh by name:
 	// note: will throw if mesh not found.
-	const RiggedMesh &lookup(std::string const &name) const;
+	const std::vector < BoneInfluence > &lookup(std::string const &name) const;
 
-	//-- internals ---
+	MeshBuffer::Attrib BoneIndices;
+	MeshBuffer::Attrib BoneWeights;
 
-	std::vector< DynamicMeshBuffer::Vertex > vertex_data;
-	std::vector< VertexGroup > group_data;
-	std::vector< VertexGroupIndex > group_index;
+	// buffer storing bone index/weight information
+	GLuint buffer = 0;
+	GLuint total = 0;
 
+	// -- internals --
 	//used by the lookup() function:
-	std::map< std::string, RiggedMesh > meshes;
+	//std::map< std::string, std::vector< BoneInfluence > > influences;
+};
+
+struct RiggedMesh {
+	const Mesh &mesh;
+	const Skeleton &skeleton;
+	AnimationGraph< Skeleton::BoneTransform > *anim_graph = nullptr;
+
+	// source is MeshBuffer::buffer where the mesh data exists for purpose of vao creation
+	RiggedMesh(
+		GLuint vbo_vert, 
+		GLuint vbo_bone, 
+		const Mesh &mesh, 
+		const Skeleton &skeleton) 
+		: vbo_vert(vbo_vert), 
+		  vbo_bone(vbo_bone), 
+		  mesh(mesh), 
+		  skeleton(skeleton) 
+		{ assert(vbo_vert > 0 && vbo_bone > 0); };
+	RiggedMesh(
+		GLuint vbo_vert, 
+		GLuint vbo_bone, 
+		const Mesh &mesh,
+		const Skeleton &skeleton, 
+		AnimationGraph< Skeleton::BoneTransform > *anim_graph) 
+		: vbo_vert(vbo_vert), 
+		  vbo_bone(vbo_bone), 
+		  mesh(mesh), 
+		  skeleton(skeleton), 
+		  anim_graph(anim_graph) 
+		{ assert(vbo_vert > 0 && vbo_bone > 0); };
+
+	// binds the mesh to the skeleton via bone weight information
+	//void bind(std::vector < BoneInfluence > infls);
+	void update(float elapsed);
+
+	//glm::mat4 mesh_from_world;
+	//glm::mat4 world_from_mesh;
+
+	GLuint program = 0;
+
+	GLuint vbo_vert = 0;
+	GLuint vbo_bone = 0;
+	GLuint make_vao_for_program(GLuint program);
 };

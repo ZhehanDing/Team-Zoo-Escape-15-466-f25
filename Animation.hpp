@@ -82,7 +82,7 @@ struct AnimationGraph {
 
     void update(float elapsed);
     // returns map of actor name to new data
-    std::map< std::string, T > sample();
+    std::vector< T > sample();
 
     // -- internals
     std::map< std::string, State > states;
@@ -261,7 +261,7 @@ template <typename T>
 const Animation< T > &AnimationBuffer< T >::lookup(std::string const &name) const {
     auto a = animations.find(name);
     if (a == animations.end()) {
-		throw std::runtime_error("Looking up animation '" + name + "' that doesn't exist.");
+		throw std::runtime_error("WARNING: looking up animation '" + name + "' that doesn't exist.");
     }
     return a->second;
 }
@@ -332,8 +332,9 @@ void AnimationGraph< T >::update(float elapsed) {
     }
 }
 
+// returns a vector of sampled actors, in the same order as specified in the constructor
 template <typename T>
-std::map< std::string, T > AnimationGraph< T >::sample() {
+std::vector< T > AnimationGraph< T >::sample() {
     if (!current_state) {
         std::cerr << "WARNING: No data exists in this animation graph" << std::endl;
         return {};
@@ -370,10 +371,9 @@ std::map< std::string, T > AnimationGraph< T >::sample() {
     } else t = 1.f;
 
     assert(curr.count == next.count);
-    std::map < std::string, T > res;
-    for (uint32_t i = 0; i < curr.count; i++) {
-        res.insert(std::make_pair(animation.index_to_name[i], 
-            interp(animation.data[curr.start + i], animation.data[next.start + i], t)));
+    std::vector < T > res(curr.count);
+    for (uint32_t i = 0; i < curr.count; ++i) {
+        res[i] = interp(animation.data[curr.start + i], animation.data[next.start + i], t);
     }
 
     return res;

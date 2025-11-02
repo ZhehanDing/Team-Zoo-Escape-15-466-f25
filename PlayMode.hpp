@@ -48,4 +48,5 @@ struct PlayMode : Mode {
 		float yaw = 0.f;
 		float pitch = glm::radians(90.f);
 	} cam_info;
+
 };
