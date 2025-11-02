@@ -70,6 +70,7 @@ def add_meshes(from_collection):
 				print("Skipping mesh '" + obj.data.name + "' because its name starts with an underscore.")
 			else:
 				to_write.add(obj.data)
+				# print("Added mesh '" + obj.data.name + "' from object '" + obj.name + "'.")
 		if obj.instance_collection:
 			add_meshes(obj.instance_collection)
 	for child in from_collection.children:
