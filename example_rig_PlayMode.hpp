@@ -3,7 +3,6 @@
 #include "Scene.hpp"
 #include "Sound.hpp"
 
-#include "Collision.hpp"
 #include "Skeleton.hpp"
 #include "Animation.hpp"
 
@@ -38,8 +37,6 @@ struct PlayMode : Mode {
 	struct Player {
 		Scene::Transform transform;
 		std::vector< Scene::Drawable > drawables;
-
-		Collider col = Collider(&transform);
 	} player;
 
 	//camera:

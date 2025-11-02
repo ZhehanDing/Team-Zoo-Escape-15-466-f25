@@ -39,7 +39,6 @@ Load< AnimationBuffer< Skeleton::BoneTransform > > animations(LoadTagDefault, []
 
 Scene::Transform *joints_transform;
 Scene::Transform *surface_transform;
-std::vector < Collider > colliders;
 Load< Scene > test_scene(LoadTagDefault, []() -> Scene const * {
 	return new Scene(data_path("test.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		if (mesh_name == "Beta_Surface") {
@@ -51,8 +50,6 @@ Load< Scene > test_scene(LoadTagDefault, []() -> Scene const * {
 		/*
 		Mesh const &mesh = meshes->lookup(mesh_name);
 		scene.drawables.emplace_back(transform);
-		colliders.emplace_back(Collider(transform));
-		colliders.back().set_bounds(mesh.min, mesh.max);
 		Scene::Drawable &drawable = scene.drawables.back();
 
 		if (scene.drawables.size() == 2) {
@@ -367,11 +364,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3(H * .9f, 0.0f, 0.0f), glm::vec3(0.0f, H * .9f, 0.0f),
 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
 */
-		// world drawing for physics debugging.
-		DrawLines world(glm::mat3x4(camera->make_projection()) * camera->transform->make_local_from_world());
-		for (Collider col : colliders) {
-			world.draw_box(col.make_world_from_local(), glm::u8vec4(255, 0, 0, 255));
-		}
 	}
 	GL_ERRORS();
 }

@@ -138,9 +138,7 @@ if (maek.OS === 'windows') {
 //returns objFile: objFileBase + a platform-dependant suffix ('.o' or '.obj')
 const game_names = [
 	maek.CPP('RiggedMesh.cpp'),
-	maek.CPP('DynamicMeshBuffer.cpp'),
 	maek.CPP('Skeleton.cpp'),
-	maek.CPP('Collision.cpp'),
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('main.cpp'),
 	maek.CPP('SkinningProgram.cpp'),
