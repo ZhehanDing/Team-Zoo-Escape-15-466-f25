@@ -324,15 +324,6 @@ for outfile in outfiles:
 		blob.write(struct.pack('4s',b'infl')) #type
 		blob.write(struct.pack('I', len(vg_data))) #length
 		blob.write(vg_data)
-		#second chunk: the strings
-		blob.write(struct.pack('4s',b'str0')) #type
-		blob.write(struct.pack('I', len(strings))) #length
-		blob.write(strings)
-		#third chunk: the index
-		blob.write(struct.pack('4s',b'idx0')) #type
-		blob.write(struct.pack('I', len(index))) #length
-		blob.write(index)
 		wrote = blob.tell()
 		blob.close()
-		print("Wrote " + str(len(vg_data)+8) + " bytes of bone index, weight information + " + str(len(strings)+8) + " bytes of strings + " + 
-	  		str(len(index)+8) + " bytes of index to '" + outfile + "'")
+		print("Wrote " + str(len(vg_data)+8) + " bytes of bone index, weight information to '" + outfile + "'")

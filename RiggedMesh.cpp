@@ -39,48 +39,6 @@ BoneInfluenceBuffer::BoneInfluenceBuffer(std::string const &filename) {
 		throw std::runtime_error("Unknown file type '" + filename + "'");
 	}
 
-	std::vector< char > strings;
-	read_chunk(file, "str0", &strings);
-
-	{ //read index chunk, add to meshes:
-		struct IndexEntry {
-			uint32_t name_begin, name_end;
-			uint32_t vertex_begin, vertex_end;
-		};
-		static_assert(sizeof(IndexEntry) == 16, "Index entry should be packed");
-
-		std::vector< IndexEntry > index;
-		read_chunk(file, "idx0", &index);
-
-		/*
-		struct Matrices {
-			glm::mat4 mesh_from_world;
-			glm::mat4 world_from_mesh;
-		};
-		static_assert(sizeof(Matrices) == 128, "Matrices data should be packed");
-		
-		std::vector< Matrices > mats;
-		read_chunk(file, "mat0", &mats);
-		*/
-		/*
-		for (size_t i = 0; i < index.size(); ++i) {
-			auto const &entry = index[i];
-			if (!(entry.name_begin <= entry.name_end && entry.name_end <= strings.size())) {
-				throw std::runtime_error("index entry has out-of-range name begin/end");
-			}
-			if (!(entry.vertex_begin <= entry.vertex_end && entry.vertex_end <= total)) {
-				throw std::runtime_error("index entry has out-of-range vertex start/count");
-			}
-			std::string name(&strings[0] + entry.name_begin, &strings[0] + entry.name_end);
-			
-			bool inserted = influences.insert(std::make_pair(name, std::vector < BoneInfluence >(infl_data.begin() + entry.vertex_begin, infl_data.begin() + entry.vertex_end))).second;
-			if (!inserted) {
-				std::cerr << "WARNING: mesh name '" + name + "' in filename '" + filename + "' collides with existing mesh." << std::endl;
-			}
-		}
-		*/
-	}
-
 	if (file.peek() != EOF) {
 		std::cerr << "WARNING: trailing data in mesh file '" << filename << "'" << std::endl;
 	}
