@@ -1,10 +1,17 @@
+#define GLM_ENABLE_EXPERIMENTAL
+
 #include "Collision.hpp"
 #include "DrawLines.hpp"
-
+#include "glm/gtx/orthonormalize.hpp"
 #include <iostream>
 
-glm::mat4x3 Collider::get_transformation_matrix() {
-    return obj_transform->make_world_from_local() *
+// need to make it so that scale is applied later to avoid incorrect collider transformation
+glm::mat4x3 Collider::make_world_from_local() {
+    glm::mat4 anchor_world = anchor->make_world_from_local();
+    glm::mat3 anchor_rot = glm::orthonormalize(glm::mat3(anchor_world));
+    glm::mat4 anchor_world_ = glm::mat4(anchor_rot);
+    anchor_world_[3] = anchor_world[3];
+    return anchor_world_ *
         glm::mat4(
             size.x, 0.f, 0.f, offset.x,
             0.f, size.y, 0.f, offset.y,
@@ -13,14 +20,19 @@ glm::mat4x3 Collider::get_transformation_matrix() {
         );
 }
 
+void Collider::set_bounds(glm::vec3 min, glm::vec3 max) {
+    size = (max - min) / 2.f;
+    offset = (max + min) / 2.f;
+}
+
 // https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection
 // need to update with local from world transformation into one of the two local spaces
 bool Collider::intersect(Collider other) {
-    glm::highp_vec3 min = obj_transform->position + offset - size;
-    glm::highp_vec3 max = obj_transform->position + offset + size;
+    glm::highp_vec3 min = anchor->position + offset - size;
+    glm::highp_vec3 max = anchor->position + offset + size;
 
-    glm::highp_vec3 other_min = other.obj_transform->position + other.offset - other.size;
-    glm::highp_vec3 other_max = other.obj_transform->position + other.offset + other.size;
+    glm::highp_vec3 other_min = other.anchor->position + other.offset - other.size;
+    glm::highp_vec3 other_max = other.anchor->position + other.offset + other.size;
 
     return min.x <= other_max.x &&
         max.x >= other_min.x &&
@@ -41,15 +53,15 @@ bool Collider::clip_movement(Collider other, glm::highp_vec3 &dir, float &dist, 
     if (dist == 0.f) return false;
     
     // convert world direction and world position to this object space
-    glm::highp_vec3 dir_obj_space = other.obj_transform->make_local_from_world() * glm::highp_vec4(dir, 0.f);
+    glm::highp_vec3 dir_obj_space = other.anchor->make_local_from_world() * glm::highp_vec4(dir, 0.f);
 
     // my (modified) ray-bbox intersection code from 15-362 computer graphics
     // based on scratchpixel
-    glm::highp_vec3 other_min = glm::highp_vec4(other.obj_transform->make_local_from_world() * glm::highp_vec4(other.obj_transform->position, 1.f) + other.offset - other.size, 1.f);
-    glm::highp_vec3 other_max = glm::highp_vec4(other.obj_transform->make_local_from_world() * glm::highp_vec4(other.obj_transform->position, 1.f) + other.offset + other.size, 1.f);
+    glm::highp_vec3 other_min = glm::highp_vec4(other.anchor->make_local_from_world() * glm::highp_vec4(other.anchor->position, 1.f) + other.offset - other.size, 1.f);
+    glm::highp_vec3 other_max = glm::highp_vec4(other.anchor->make_local_from_world() * glm::highp_vec4(other.anchor->position, 1.f) + other.offset + other.size, 1.f);
 
-    glm::highp_vec3 min = glm::highp_vec4(other.obj_transform->make_local_from_world() * glm::highp_vec4(obj_transform->position + offset - size, 1.f), 1.f);
-    glm::highp_vec3 max = glm::highp_vec4(other.obj_transform->make_local_from_world() * glm::highp_vec4(obj_transform->position + offset + size, 1.f), 1.f);
+    glm::highp_vec3 min = glm::highp_vec4(other.anchor->make_local_from_world() * glm::highp_vec4(anchor->position + offset - size, 1.f), 1.f);
+    glm::highp_vec3 max = glm::highp_vec4(other.anchor->make_local_from_world() * glm::highp_vec4(anchor->position + offset + size, 1.f), 1.f);
 
     glm::highp_vec3 other_bounds[2] = { other_min, other_max };
     glm::highp_vec3 bounds[2] = { min, max };

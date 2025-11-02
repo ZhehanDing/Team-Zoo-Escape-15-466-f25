@@ -120,8 +120,8 @@ SkinningProgram::SkinningProgram() {
 		"	} else { //(LIGHT_TYPE == 3) //directional light \n"
 		"		e = max(0.0, dot(n,-LIGHT_DIRECTION)) * LIGHT_ENERGY;\n"
 		"	}\n"
-		"	vec4 albedo = color;\n"
-		"	fragColor = vec4(albedo.rgb, albedo.a);\n"
+		"	vec4 albedo = texture(TEX, texCoord) * color;\n"
+		"	fragColor = vec4(e*albedo.rgb, albedo.a);\n"
 		/* DEBUG: check color output linearity:
 		"	float t = random(gl_FragCoord.xy/1280.0);\n"
 		"	float amt = fract(gl_FragCoord.x/512.0);\n"

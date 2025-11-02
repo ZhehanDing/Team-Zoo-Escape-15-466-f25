@@ -8,14 +8,16 @@ struct Collider {
     glm::vec3 size = glm::vec3(1.f);
     glm::vec3 offset = glm::vec3(0.f);
 
-    glm::mat4x3 get_transformation_matrix();
+    glm::mat4x3 make_world_from_local();
 
-    Collider(Scene::Transform *obj_transform) : obj_transform(obj_transform) { assert(obj_transform); };
-    Collider(const glm::vec3 &position, const glm::vec3 &scale) : obj_transform(new Scene::Transform()) { 
-        assert(obj_transform); 
-        obj_transform->position = position;
-        obj_transform->scale = scale;
+    Collider(Scene::Transform *anchor) : anchor(anchor) { assert(anchor); };
+    Collider(const glm::vec3 &position, const glm::vec3 &scale) : anchor(new Scene::Transform()) { 
+        assert(anchor); 
+        anchor->position = position;
+        anchor->scale = scale;
     };
+
+    void set_bounds(glm::vec3 min, glm::vec3 max);
 
     bool intersect(Collider other);
     // given a start position and end, if movement from "start" to "end" were to cross
@@ -24,5 +26,5 @@ struct Collider {
     bool clip_movement(Collider other, glm::highp_vec3 &dir, float &dist, uint8_t granularity=3);
 
     private:
-        Scene::Transform *obj_transform;
+        Scene::Transform *anchor;
 };

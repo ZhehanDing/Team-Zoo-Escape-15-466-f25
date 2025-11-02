@@ -264,10 +264,6 @@ void PlayMode::update(float elapsed) {
 	joints_drawable->transform->position = graph.sample()[0];
 	surface_drawable->transform->position = graph.sample()[0];
 
-	//auto sampled_position = graph.sample();
-	//base->transform->position = sampled_position.at("position");
-	//graph.update(elapsed);
-
 	{ //update listener to camera position:
 		glm::mat4x3 frame = camera->transform->make_parent_from_local();
 		glm::vec3 frame_right = frame[0];
