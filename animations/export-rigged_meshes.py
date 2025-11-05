@@ -251,11 +251,11 @@ for obj in bpy.data.objects:
 				local_data += struct.pack('ff', 0, 0)
 
 			reduced_vgs = vertex.groups
-			# assert(len(vertex.groups) > 0)
+			assert(len(vertex.groups) > 0)
 			if len(vertex.groups) > 4:
 				reduced_vgs = sorted(vertex.groups, key=lambda vg : vg.weight, reverse=True)[:4]
 			
-			# assert(len(reduced_vgs) > 0)
+			assert(len(reduced_vgs) > 0)
 			if len(reduced_vgs) == 0:
 				reduced_vgs = [vertex.groups[0]] if len(vertex.groups) > 0 else []
 
