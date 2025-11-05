@@ -63,7 +63,7 @@ def add_armatures(from_collection):
 		print("Skipping collection '" + from_collection.name + "' because its name starts with an underscore.")
 		return
 
-	for obj in collection.objects:
+	for obj in from_collection.objects:
 		if obj.type == "ARMATURE":
 			if obj.name[0] == '_':
 				print("Skipping armature '" + obj.data.name + "' because its name starts with an underscore.")
