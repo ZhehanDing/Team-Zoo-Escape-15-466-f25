@@ -29,6 +29,7 @@ Low Poly Evergreen Tree Tall 2: https://www.blenderkit.com/get-blenderkit/ad5bf1
 Cobblestone road: https://www.blenderkit.com/get-blenderkit/c71aae1e-fa64-4454-85e0-4f76b49b9a7b/
 Street lamp: https://www.blenderkit.com/get-blenderkit/58ed8a12-f81f-4f24-ba5b-de43e1d6baf8/
 Man model for separate body parts: https://www.fab.com/listings/65434ad8-bfd3-466d-bc4f-6319ec3366f8
+Fence Segment: https://www.blenderkit.com/get-blenderkit/0470ca8c-0719-4404-a4ef-47794852264e/
 
 This game was built with [NEST](NEST.md).
 
