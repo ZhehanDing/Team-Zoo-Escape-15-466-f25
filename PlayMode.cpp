@@ -163,7 +163,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
-		if (transform.name == "Enemy") enemy = &transform;
+		if (transform.name == "Human.rigify") enemy = &transform;
 		if (transform.name == "Final_Deer") final_deer = &transform;
 		if (transform.name == "Final_Deer Leg") {
 			final_deer_leg = &transform;
@@ -187,20 +187,29 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	player_base_rotation = player->rotation;
 
 	for (auto &d : scene.drawables) {
-		if (d.transform == enemy)
-			d.pipeline.count = 0;
+		if (d.transform == enemy &&
+			d.pipeline.vao == zoo_meshes_for_lit_color_texture_program) {
+			d.pipeline.count = 0; // hide old enemy mesh
+		}
 	}
 
-	Mesh const &human_mesh = human_meshes->lookup("Human");
+	Mesh const &human_mesh = human_meshes->lookup("base.001");
 	Skeleton const &human_skel = human_skeletons->lookup("Human.rigify");
 
 	enemy_skeleton = std::make_unique< Skeleton >(human_skel);
-	enemy_graph = AnimationGraph< Skeleton::BoneTransform >(
-		[](Skeleton::BoneTransform const &a, Skeleton::BoneTransform const &, float) { return a; });
-
-	enemy_rig =
-		std::make_unique< RiggedMesh >(human_meshes->buffer, human_infls->buffer, human_mesh, *enemy_skeleton, &enemy_graph);
+	auto g = [](const Skeleton::BoneTransform &a,
+				const Skeleton::BoneTransform &b,
+				float t) {
+		Skeleton::BoneTransform out;
+		out.position = glm::mix(a.position, b.position, t);
+		out.rotation = glm::normalize(glm::slerp(a.rotation, b.rotation, t));
+		out.scale = glm::mix(a.scale, b.scale, t);
+		return out;
+	};
+	enemy_graph = AnimationGraph< Skeleton::BoneTransform >(g);
 	enemy_graph.add_state(human_animations->lookup("Walk"));
+	enemy_rig = std::make_unique< RiggedMesh >(
+		human_meshes->buffer, human_infls->buffer, human_mesh, *enemy_skeleton, &enemy_graph);
 
 	// populate rigged mesh
 	scene.drawables.emplace_back(enemy);
@@ -476,7 +485,6 @@ bool check_collision(glm::vec3 posA, glm::vec3 halfSizeA, glm::vec3 posB, glm::v
 }
 
 void PlayMode::update(float elapsed) {
-	// --- Camera zoom tween ---
 	if (game_over) {
 		// Optional: keep camera/UI effects, but block gameplay logic
 		// camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
@@ -508,6 +516,11 @@ void PlayMode::update(float elapsed) {
 			enemy_collapsing = false; // finished collapsing
 		}
 	}
+	// animate human
+	enemy->scale = glm::vec3(1.5f);
+	// enemy_graph.update(elapsed);
+	enemy_rig->update(elapsed);
+
 	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 
 	// --- Player movement (WASD, relative to camera) ---
