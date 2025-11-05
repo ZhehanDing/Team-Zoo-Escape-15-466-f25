@@ -211,6 +211,61 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	enemy_rig = std::make_unique< RiggedMesh >(
 		human_meshes->buffer, human_infls->buffer, human_mesh, *enemy_skeleton, &enemy_graph);
 
+	auto make_civilian = [&](const glm::vec3 &location) {
+		Civilian c;
+
+		scene.transforms.emplace_back();
+
+		c.transform = &scene.transforms.back();
+		c.transform->position = location;
+		c.transform->rotation = enemy_base_rotation;
+		c.base_rotation = c.transform->rotation;
+		c.start_pos = glm::vec2(location.x, location.y);
+
+		Mesh const &mesh = human_meshes->lookup("base.001");
+		Skeleton const &sk = human_skeletons->lookup("Human.rigify");
+		c.skel = std::make_unique< Skeleton >(sk);
+
+		// c.graph.add_state(human_animations->lookup("Walk"));
+
+		c.rig = std::make_unique< RiggedMesh >(
+			human_meshes->buffer, human_infls->buffer, mesh, *c.skel, &c.graph);
+
+		scene.drawables.emplace_back(c.transform);
+		Scene::Drawable &drawable = scene.drawables.back();
+		drawable.pipeline = skinning_program_pipeline;
+		drawable.pipeline.vao = c.rig->make_vao_for_program(skinning_program->program);
+		drawable.pipeline.type = c.rig->mesh.type;
+		drawable.pipeline.start = c.rig->mesh.start;
+		drawable.pipeline.count = c.rig->mesh.count;
+
+		civilians.emplace_back(std::move(c));
+	};
+
+	// populate civilians
+	std::mt19937 civilians_rng{std::random_device{}()};
+	glm::vec3 center = glm::vec3(-40.0f, -30.0f, 0.0f);
+	for (int i = 0; i < 4; i++) {
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+
+		make_civilian(center + glm::vec3(x, y, 0.0f));
+	}
+	center = glm::vec3(-5.0f, 0.0f, 0.0f);
+	for (int i = 0; i < 4; i++) {
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+
+		make_civilian(center + glm::vec3(x, y, 0.0f));
+	}
+		center = glm::vec3(0.0f, 40.0f, 0.0f);
+	for (int i = 0; i < 4; i++) {
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+
+		make_civilian(center + glm::vec3(x, y, 0.0f));
+	}
+
 	// populate rigged mesh
 	scene.drawables.emplace_back(enemy);
 	Scene::Drawable &enemy_drawable = scene.drawables.back();
@@ -712,6 +767,13 @@ void PlayMode::update(float elapsed) {
 			}
 		}
 	}
+
+	// update civilians
+	for (auto &civilian : civilians) {
+		civilian_update(civilian, elapsed);
+	}
+	resolve_collisions(civilians);
+	civilian_avoid_obstacles(civilians, {{player, 0.7f}, {enemy, 0.7f}});
 
 	// --- Audio listener follow player ---
 	{

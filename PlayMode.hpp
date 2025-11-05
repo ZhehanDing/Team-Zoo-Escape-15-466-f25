@@ -16,6 +16,8 @@
 #include "RiggedMesh.hpp"
 #include "Skeleton.hpp"
 #include <deque>
+#include <vector>
+#include "Civilian.hpp" 
 
 struct PlayMode : Mode {
 	PlayMode();
@@ -37,6 +39,8 @@ struct PlayMode : Mode {
 
 	// local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
+
+	std::vector<Civilian> civilians;
 
 	Scene::Transform *player = nullptr;
 	Scene::Transform *enemy = nullptr;
