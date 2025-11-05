@@ -483,7 +483,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glDepthFunc(GL_LEQUAL); // depth test: pass if incoming depth <= stored depth
 
 	//draw objects to geometry framebuffers:
-	zoo_scene_deferred->draw(world_to_clip); // render scene into G-buffers using world->clip matrix
+	scene.draw(world_to_clip); // render scene into G-buffers using world->clip matrix
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind framebuffer (return to default framebuffer)
 
@@ -519,7 +519,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glActiveTexture(GL_TEXTURE2); // select texture unit 2
 	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex); // bind albedo (color) G-buffer to unit 2
 
-	for (auto const &light : zoo_scene_deferred->lights) { // iterate over all lights in the scene
+	for (auto const &light : scene.lights) { // iterate over all lights in the scene
 		glm::mat4 light_to_world = light.transform->make_world_from_local(); // compute light's model-to-world transform
 
 		Mesh const *mesh = nullptr; // pointer to chosen light-volume mesh for this light
@@ -637,223 +637,233 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glBindVertexArray(0);                   // Unbind VAO
 	glUseProgram(0);                        // Unbind shader program
 
-	// //--- stalking mechanics ---
-	// if (focus_mode) {
-	// 	glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // stark white background for high contrast
-	// } else {
-	// 	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
-	// }
-	// glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
-	// glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	//--- stalking mechanics ---
+	if (focus_mode) {
+		glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // stark white background for high contrast
+	} else {
+		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+	}
 
-	// glEnable(GL_DEPTH_TEST);
-	// glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
+	// We already have the lit color on the default framebuffer.
+	// Now we only want depth, so disable color writes:
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
+	glDepthMask(GL_TRUE);
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-	// scene.draw(*camera);
-	// enemy_visible = true; // default
+	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
+	glClear(GL_DEPTH_BUFFER_BIT); // clears depth only (color is masked off)
 
+	// Draw the scene with your normal pipelines; this will fill depth,
+	// but leave the deferred-lit color untouched:
+	scene.draw(*camera);
+
+	// Re-enable color writes for later overlays:
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+	enemy_visible = true; // default
+
+	if (enemy) {
+		// Project enemy position to screen:
+		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+		glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
+		glm::vec3 e_world = world_from_enemy[3];
+
+		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
+		if (clip.w > 0.0f) {
+			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
+			// Window coords (pixels):
+			float sx = (ndc.x * 0.5f + 0.5f) * drawable_size.x;
+			float sy = (ndc.y * 0.5f + 0.5f) * drawable_size.y;
+			float enemy_depth = ndc.z * 0.5f + 0.5f; // [0,1]
+
+			// Sample a small box around the enemy (e.g., ~20px radius):
+			const int radius = 20;
+			const int step   = 10;  // stride between samples
+			const float eps  = 1e-3f;
+
+			int total = 0;
+			int occluded = 0;
+
+			for (int dy = -radius; dy <= radius; dy += step) {
+				for (int dx = -radius; dx <= radius; dx += step) {
+					int px = int(sx) + dx;
+					int py = int(sy) + dy;
+					if (px < 0 || py < 0 || px >= int(drawable_size.x) || py >= int(drawable_size.y)) continue;
+
+					float depth_sample = 1.0f;
+					glReadPixels(px, py, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth_sample);
+
+					// If the sample depth is *in front of* the enemy (smaller), that point is blocked:
+					if (depth_sample + eps < enemy_depth) occluded++;
+					total++;
+				}
+			}
+			// "Fully blocked" ≈ all tested points occluded:
+			if (total > 0 && occluded == total) enemy_visible = false;
+		} else {
+			// behind camera
+			enemy_visible = false;
+		}
+	}
+	if (focus_mode && enemy && enemy_visible) {
+		// project enemy world position to clip space:
+		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+		glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
+		glm::vec3 e_world = world_from_enemy[3];           // translation column
+		glm::vec4 e_clip  = clip_from_world * glm::vec4(e_world, 1.0f);
+
+		if (e_clip.w > 0.0f) {
+			glm::vec3 e_ndc = glm::vec3(e_clip) / e_clip.w; // [-1,1] range
+			// set up 2D line drawer (same as your text HUD uses)
+			glDisable(GL_DEPTH_TEST);
+			float aspect = float(drawable_size.x) / float(drawable_size.y);
+			DrawLines lines(glm::mat4(
+				1.0f / aspect, 0.0f, 0.0f, 0.0f,
+				0.0f, 1.0f, 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0f, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			));
+
+			// Convert NDC to the DrawLines' coords: x in [-aspect, aspect], y in [-1,1]
+			glm::vec3 p(e_ndc.x * aspect, e_ndc.y, 0.0f);
+
+			// crosshair size (in screen space units):
+			const float s = 0.05f;
+
+			// crosshair lines (black for visibility on white bg):
+			glm::u8vec4 col(0x00, 0x00, 0x00, 0xff);
+			lines.draw(p + glm::vec3(-s, 0.0f, 0.0f), p + glm::vec3(+s, 0.0f, 0.0f), col);
+			lines.draw(p + glm::vec3(0.0f, -s, 0.0f), p + glm::vec3(0.0f, +s, 0.0f), col);
+
+			// "ENEMY" label just above the crosshair:
+			const float H = 0.06f;
+			lines.draw_text("ENEMY",
+				p + glm::vec3(-0.5f * H, +1.4f * H, 0.0f),
+				glm::vec3(H, 0.0f, 0.0f),
+				glm::vec3(0.0f, H, 0.0f),
+				col
+			);
+			glEnable(GL_DEPTH_TEST);
+		}
+	}
+	if (focus_mode && enemy) {
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+
+		// bar geometry (screen space): centered, near bottom
+		const float bar_w = 1.6f;     // total width
+		const float bar_h = 0.08f;    // height
+		const float y     = -0.90f;   // vertical position
+		const float x0    = -0.5f * bar_w;
+		const float x1    =  0.5f * bar_w;
+		const float y0    = y;
+		const float y1    = y + bar_h;
+
+		// outline (light gray)
+		glm::u8vec4 outline(0xcc, 0xcc, 0xcc, 0xff);
+		lines.draw(glm::vec3(x0, y0, 0.0f), glm::vec3(x1, y0, 0.0f), outline);
+		lines.draw(glm::vec3(x1, y0, 0.0f), glm::vec3(x1, y1, 0.0f), outline);
+		lines.draw(glm::vec3(x1, y1, 0.0f), glm::vec3(x0, y1, 0.0f), outline);
+		lines.draw(glm::vec3(x0, y1, 0.0f), glm::vec3(x0, y0, 0.0f), outline);
+
+		// background (empty) – thin gray center line just for context (optional)
+		glm::u8vec4 back(0x55, 0x55, 0x55, 0xff);
+		lines.draw(glm::vec3(x0, (y0+y1)*0.5f, 0.0f), glm::vec3(x1, (y0+y1)*0.5f, 0.0f), back);
+
+		// FILLED BLACK RECTANGLE that grows with stalk_charge:
+		const float fill_x = x0 + (x1 - x0) * stalk_charge;
+		glm::u8vec4 black(0x00, 0x00, 0x00, 0xff);
+
+		// scan-fill using horizontal lines
+		const int stripes = 48; // more = more solid-looking fill
+		for (int i = 0; i < stripes; ++i) {
+			float t0 = float(i) / stripes;
+			float y_line = y0 + t0 * bar_h;
+			lines.draw(glm::vec3(x0,    y_line, 0.0f),
+					glm::vec3(fill_x, y_line, 0.0f),
+					black);
+		}
+
+		// label
+		const float H = 0.06f;
+		lines.draw_text("STALK",
+			glm::vec3(x0, y1 + 0.02f, 0.0f),
+			glm::vec3(H, 0.0f, 0.0f),
+			glm::vec3(0.0f, H, 0.0f),
+			outline
+		);
+
+		glEnable(GL_DEPTH_TEST);
+	}
 	
-	// if (enemy) {
-	// 	// Project enemy position to screen:
-	// 	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-	// 	glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
-	// 	glm::vec3 e_world = world_from_enemy[3];
-
-	// 	glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
-	// 	if (clip.w > 0.0f) {
-	// 		glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
-	// 		// Window coords (pixels):
-	// 		float sx = (ndc.x * 0.5f + 0.5f) * drawable_size.x;
-	// 		float sy = (ndc.y * 0.5f + 0.5f) * drawable_size.y;
-	// 		float enemy_depth = ndc.z * 0.5f + 0.5f; // [0,1]
-
-	// 		// Sample a small box around the enemy (e.g., ~20px radius):
-	// 		const int radius = 20;
-	// 		const int step   = 10;  // stride between samples
-	// 		const float eps  = 1e-3f;
-
-	// 		int total = 0;
-	// 		int occluded = 0;
-
-	// 		for (int dy = -radius; dy <= radius; dy += step) {
-	// 			for (int dx = -radius; dx <= radius; dx += step) {
-	// 				int px = int(sx) + dx;
-	// 				int py = int(sy) + dy;
-	// 				if (px < 0 || py < 0 || px >= int(drawable_size.x) || py >= int(drawable_size.y)) continue;
-
-	// 				float depth_sample = 1.0f;
-	// 				glReadPixels(px, py, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth_sample);
-
-	// 				// If the sample depth is *in front of* the enemy (smaller), that point is blocked:
-	// 				if (depth_sample + eps < enemy_depth) occluded++;
-	// 				total++;
-	// 			}
-	// 		}
-	// 		// "Fully blocked" ≈ all tested points occluded:
-	// 		if (total > 0 && occluded == total) enemy_visible = false;
-	// 	} else {
-	// 		// behind camera
-	// 		enemy_visible = false;
-	// 	}
-	// }
-	// if (focus_mode && enemy && enemy_visible) {
-	// 	// project enemy world position to clip space:
-	// 	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-
-	// 	glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
-	// 	glm::vec3 e_world = world_from_enemy[3];           // translation column
-	// 	glm::vec4 e_clip  = clip_from_world * glm::vec4(e_world, 1.0f);
-
-	// 	if (e_clip.w > 0.0f) {
-	// 		glm::vec3 e_ndc = glm::vec3(e_clip) / e_clip.w; // [-1,1] range
-	// 		// set up 2D line drawer (same as your text HUD uses)
-	// 		glDisable(GL_DEPTH_TEST);
-	// 		float aspect = float(drawable_size.x) / float(drawable_size.y);
-	// 		DrawLines lines(glm::mat4(
-	// 			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-	// 			0.0f, 1.0f, 0.0f, 0.0f,
-	// 			0.0f, 0.0f, 1.0f, 0.0f,
-	// 			0.0f, 0.0f, 0.0f, 1.0f
-	// 		));
-
-	// 		// Convert NDC to the DrawLines' coords: x in [-aspect, aspect], y in [-1,1]
-	// 		glm::vec3 p(e_ndc.x * aspect, e_ndc.y, 0.0f);
-
-	// 		// crosshair size (in screen space units):
-	// 		const float s = 0.05f;
-
-	// 		// crosshair lines (black for visibility on white bg):
-	// 		glm::u8vec4 col(0x00, 0x00, 0x00, 0xff);
-	// 		lines.draw(p + glm::vec3(-s, 0.0f, 0.0f), p + glm::vec3(+s, 0.0f, 0.0f), col);
-	// 		lines.draw(p + glm::vec3(0.0f, -s, 0.0f), p + glm::vec3(0.0f, +s, 0.0f), col);
-
-	// 		// "ENEMY" label just above the crosshair:
-	// 		const float H = 0.06f;
-	// 		lines.draw_text("ENEMY",
-	// 			p + glm::vec3(-0.5f * H, +1.4f * H, 0.0f),
-	// 			glm::vec3(H, 0.0f, 0.0f),
-	// 			glm::vec3(0.0f, H, 0.0f),
-	// 			col
-	// 		);
-	// 		glEnable(GL_DEPTH_TEST);
-	// 	}
-	// }
-	// if (focus_mode && enemy) {
-	// 	glDisable(GL_DEPTH_TEST);
-	// 	float aspect = float(drawable_size.x) / float(drawable_size.y);
-	// 	DrawLines lines(glm::mat4(
-	// 		1.0f / aspect, 0.0f, 0.0f, 0.0f,
-	// 		0.0f, 1.0f, 0.0f, 0.0f,
-	// 		0.0f, 0.0f, 1.0f, 0.0f,
-	// 		0.0f, 0.0f, 0.0f, 1.0f
-	// 	));
-
-	// 	// bar geometry (screen space): centered, near bottom
-	// 	const float bar_w = 1.6f;     // total width
-	// 	const float bar_h = 0.08f;    // height
-	// 	const float y     = -0.90f;   // vertical position
-	// 	const float x0    = -0.5f * bar_w;
-	// 	const float x1    =  0.5f * bar_w;
-	// 	const float y0    = y;
-	// 	const float y1    = y + bar_h;
-
-	// 	// outline (light gray)
-	// 	glm::u8vec4 outline(0xcc, 0xcc, 0xcc, 0xff);
-	// 	lines.draw(glm::vec3(x0, y0, 0.0f), glm::vec3(x1, y0, 0.0f), outline);
-	// 	lines.draw(glm::vec3(x1, y0, 0.0f), glm::vec3(x1, y1, 0.0f), outline);
-	// 	lines.draw(glm::vec3(x1, y1, 0.0f), glm::vec3(x0, y1, 0.0f), outline);
-	// 	lines.draw(glm::vec3(x0, y1, 0.0f), glm::vec3(x0, y0, 0.0f), outline);
-
-	// 	// background (empty) – thin gray center line just for context (optional)
-	// 	glm::u8vec4 back(0x55, 0x55, 0x55, 0xff);
-	// 	lines.draw(glm::vec3(x0, (y0+y1)*0.5f, 0.0f), glm::vec3(x1, (y0+y1)*0.5f, 0.0f), back);
-
-	// 	// FILLED BLACK RECTANGLE that grows with stalk_charge:
-	// 	const float fill_x = x0 + (x1 - x0) * stalk_charge;
-	// 	glm::u8vec4 black(0x00, 0x00, 0x00, 0xff);
-
-	// 	// scan-fill using horizontal lines
-	// 	const int stripes = 48; // more = more solid-looking fill
-	// 	for (int i = 0; i < stripes; ++i) {
-	// 		float t0 = float(i) / stripes;
-	// 		float y_line = y0 + t0 * bar_h;
-	// 		lines.draw(glm::vec3(x0,    y_line, 0.0f),
-	// 				glm::vec3(fill_x, y_line, 0.0f),
-	// 				black);
-	// 	}
-
-	// 	// label
-	// 	const float H = 0.06f;
-	// 	lines.draw_text("STALK",
-	// 		glm::vec3(x0, y1 + 0.02f, 0.0f),
-	// 		glm::vec3(H, 0.0f, 0.0f),
-	// 		glm::vec3(0.0f, H, 0.0f),
-	// 		outline
-	// 	);
-
-	// 	glEnable(GL_DEPTH_TEST);
-	// }
+	if (being_watched) {
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+		// Centered-ish: start slightly left of (0,0)
+		constexpr float H = 0.14f; // text size
+		glm::u8vec4 warn = glm::u8vec4(0xff, 0x40, 0x40, 0xff);
+		lines.draw_text("You are being watched!",
+			glm::vec3(-0.55f, 0.02f, 0.0f),   // tweak to taste for centering
+			glm::vec3(H, 0.0f, 0.0f),         // x step
+			glm::vec3(0.0f, H, 0.0f),         // y step
+			warn
+		);
+		glEnable(GL_DEPTH_TEST);
+	}
 	
-	// if (being_watched) {
-	// 	glDisable(GL_DEPTH_TEST);
-	// 	float aspect = float(drawable_size.x) / float(drawable_size.y);
-	// 	DrawLines lines(glm::mat4(
-	// 		1.0f / aspect, 0.0f, 0.0f, 0.0f,
-	// 		0.0f, 1.0f, 0.0f, 0.0f,
-	// 		0.0f, 0.0f, 1.0f, 0.0f,
-	// 		0.0f, 0.0f, 0.0f, 1.0f
-	// 	));
-	// 	// Centered-ish: start slightly left of (0,0)
-	// 	constexpr float H = 0.14f; // text size
-	// 	glm::u8vec4 warn = glm::u8vec4(0xff, 0x40, 0x40, 0xff);
-	// 	lines.draw_text("You are being watched!",
-	// 		glm::vec3(-0.55f, 0.02f, 0.0f),   // tweak to taste for centering
-	// 		glm::vec3(H, 0.0f, 0.0f),         // x step
-	// 		glm::vec3(0.0f, H, 0.0f),         // y step
-	// 		warn
-	// 	);
-	// 	glEnable(GL_DEPTH_TEST);
-	// }
-	
-	// if (game_over) {
-	// 	glDisable(GL_DEPTH_TEST);
-	// 	float aspect = float(drawable_size.x) / float(drawable_size.y);
-	// 	DrawLines lines(glm::mat4(
-	// 		1.0f / aspect, 0.0f, 0.0f, 0.0f,
-	// 		0.0f, 1.0f, 0.0f, 0.0f,
-	// 		0.0f, 0.0f, 1.0f, 0.0f,
-	// 		0.0f, 0.0f, 0.0f, 1.0f
-	// 	));
-	// 	constexpr float H = 0.18f; // slightly larger text
-	// 	glm::u8vec4 color = glm::u8vec4(0xff, 0x00, 0x00, 0xff); // bright red
-	// 	lines.draw_text("Zoo has been locked",
-	// 		glm::vec3(-0.7f, 0.0f, 0.0f),  // centered-ish position
-	// 		glm::vec3(H, 0.0f, 0.0f),
-	// 		glm::vec3(0.0f, H, 0.0f),
-	// 		color
-	// 	);
-	// 	glEnable(GL_DEPTH_TEST);
-	// }
-	// { //use DrawLines to overlay some text:
-	// 	glDisable(GL_DEPTH_TEST);
-	// 	float aspect = float(drawable_size.x) / float(drawable_size.y);
-	// 	DrawLines lines(glm::mat4(
-	// 		1.0f / aspect, 0.0f, 0.0f, 0.0f,
-	// 		0.0f, 1.0f, 0.0f, 0.0f,
-	// 		0.0f, 0.0f, 1.0f, 0.0f,
-	// 		0.0f, 0.0f, 0.0f, 1.0f
-	// 	));
+	if (game_over) {
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+		constexpr float H = 0.18f; // slightly larger text
+		glm::u8vec4 color = glm::u8vec4(0xff, 0x00, 0x00, 0xff); // bright red
+		lines.draw_text("Zoo has been locked",
+			glm::vec3(-0.7f, 0.0f, 0.0f),  // centered-ish position
+			glm::vec3(H, 0.0f, 0.0f),
+			glm::vec3(0.0f, H, 0.0f),
+			color
+		);
+		glEnable(GL_DEPTH_TEST);
+	}
+	{ //use DrawLines to overlay some text:
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
 
-	// 	constexpr float H = 0.09f;
-	// 	lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks...",
-	// 		glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-	// 		glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-	// 		glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-	// 	float ofs = 2.0f / drawable_size.y;
-	// 	lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks...",
-	// 		glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
-	// 		glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-	// 		glm::u8vec4(0xff, 0xff, 0xff, 0x00));
-	// }
-	// GL_ERRORS();
+		constexpr float H = 0.09f;
+		lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks...",
+			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+		float ofs = 2.0f / drawable_size.y;
+		lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks...",
+			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
+			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+	}
+	GL_ERRORS();
 }
