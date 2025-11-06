@@ -165,11 +165,15 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 			final_deer_leg = &transform;
 			transform.scale = glm::vec3(0.0f); // set invisible initially
 		}
+		if (transform.name == "Sky") sky = &transform;
+		if (transform.name == "Gate") gate = &transform;
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
 	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
 	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
+	if (sky == nullptr) throw std::runtime_error("sky not found.");
+	if (gate == nullptr) throw std::runtime_error("gate not found.");
 
 	player_base_rotation = player->rotation;
 
@@ -423,6 +427,13 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	return false;
 }
 
+bool check_collision(glm::vec3 posA, glm::vec3 halfSizeA, glm::vec3 posB, glm::vec3 halfSizeB)
+{
+	return (std::abs(posA.x - posB.x) <= (halfSizeA.x + halfSizeB.x)) &&
+		   (std::abs(posA.y - posB.y) <= (halfSizeA.y + halfSizeB.y)) &&
+		   (std::abs(posA.z - posB.z) <= (halfSizeA.z + halfSizeB.z));
+}
+
 void PlayMode::update(float elapsed) {
 	// --- Camera zoom tween ---
 		if (game_over) {
@@ -476,7 +487,23 @@ void PlayMode::update(float elapsed) {
 		glm::vec3 frame_right   = -frame[0];
 		glm::vec3 frame_forward = -frame[1];
 
-		player->position += move.x * frame_right + move.y * frame_forward;
+		// player->position += move.x * frame_right + move.y * frame_forward;
+
+		glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
+
+		// Define approximate hitboxes (adjust to your model scale)
+		glm::vec3 player_half(1.0f, 1.0f, 1.0f);
+		glm::vec3 gate_half(2.0f, 9.0f, 3.0f);
+
+		// Check collisions
+		bool hit_gate = check_collision(new_pos, player_half, gate->position, gate_half);
+
+		if (!hit_gate)
+		{
+			player->position = new_pos; // Only move if no collision
+		} else {
+			printf("Collision with gate detected!\n");
+		}
 		}
 	}
 
