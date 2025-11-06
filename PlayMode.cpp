@@ -48,7 +48,7 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
 	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
 
-	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name) {
 		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
@@ -63,10 +63,10 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		drawable.pipeline.count = mesh.count;
 
 		float roughness = 1.0f;
-		if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
+		if (transform->name.substr(0, 9) == "Icosphere") { // TODO: change name
 			roughness = (transform->position.y + 10.0f) / 18.0f;
 		}
-		drawable.pipeline.set_uniforms = [roughness](){
+		drawable.pipeline.set_uniforms = [roughness]() {
 			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
 		};
 	});
@@ -74,9 +74,9 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	return ret;
 });
 
-//Helper: maintain a framebuffer to hold rendered geometry
+// Helper: maintain a framebuffer to hold rendered geometry
 struct FB {
-	//object data gets stored in these textures:
+	// object data gets stored in these textures:
 	GLuint position_tex = 0;
 	GLuint normal_roughness_tex = 0;
 	GLuint albedo_tex = 0;
@@ -88,7 +88,7 @@ struct FB {
 	GLuint depth_rb = 0;
 
 	GLuint objects_fb = 0; //(position, normal, albedo) + depth
-	GLuint lights_fb = 0; //(output) + depth
+	GLuint lights_fb = 0;  //(output) + depth
 
 	glm::uvec2 size = glm::uvec2(0);
 
@@ -96,7 +96,7 @@ struct FB {
 		if (drawable_size == size) return;
 		size = drawable_size;
 
-		//helper to allocate a texture:
+		// helper to allocate a texture:
 		auto alloc_tex = [&](GLuint &tex, GLenum internal_format) {
 			if (tex == 0) glGenTextures(1, &tex);
 			glBindTexture(GL_TEXTURE_2D, tex);
@@ -108,29 +108,29 @@ struct FB {
 			glBindTexture(GL_TEXTURE_2D, 0);
 		};
 
-		//set up position_tex as a 32-bit floating point RGB texture:
+		// set up position_tex as a 32-bit floating point RGB texture:
 		alloc_tex(position_tex, GL_RGB32F);
 
-		//set up normal_roughness_tex as a 16-bit floating point RGBA texture:
+		// set up normal_roughness_tex as a 16-bit floating point RGBA texture:
 		alloc_tex(normal_roughness_tex, GL_RGBA16F);
 
-		//set up albedo_tex as an 8-bit fixed point RGBA texture:
+		// set up albedo_tex as an 8-bit fixed point RGBA texture:
 		alloc_tex(albedo_tex, GL_RGBA8);
 
-		//set up output_tex as an 8-bit fixed point RGBA texture:
+		// set up output_tex as an 8-bit fixed point RGBA texture:
 		alloc_tex(output_tex, GL_RGBA8);
 
-		//if depth_rb does not have a name, name it:
+		// if depth_rb does not have a name, name it:
 		if (depth_rb == 0) glGenRenderbuffers(1, &depth_rb);
-		//set up depth_rb as a 24-bit fixed-point depth buffer:
+		// set up depth_rb as a 24-bit fixed-point depth buffer:
 		glBindRenderbuffer(GL_RENDERBUFFER, depth_rb);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size.x, size.y);
 		glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-		//if objects framebuffer doesn't have a name, name it and attach textures:
+		// if objects framebuffer doesn't have a name, name it and attach textures:
 		if (objects_fb == 0) {
 			glGenFramebuffers(1, &objects_fb);
-			//set up framebuffer: (don't need to do when resizing)
+			// set up framebuffer: (don't need to do when resizing)
 			glBindFramebuffer(GL_FRAMEBUFFER, objects_fb);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, position_tex, 0);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, normal_roughness_tex, 0);
@@ -142,10 +142,10 @@ struct FB {
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		}
 
-		//if lights-drawing framebuffer doesn't have a name, name it and attach textures:
+		// if lights-drawing framebuffer doesn't have a name, name it and attach textures:
 		if (lights_fb == 0) {
 			glGenFramebuffers(1, &lights_fb);
-			//set up framebuffer: (don't need to do when resizing)
+			// set up framebuffer: (don't need to do when resizing)
 			glBindFramebuffer(GL_FRAMEBUFFER, lights_fb);
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, output_tex, 0);
 			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
@@ -154,10 +154,24 @@ struct FB {
 			check_fb();
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		}
-
 	}
 } fb;
 
+Load< MeshBuffer > human_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	return new MeshBuffer(data_path("human.pnct"));
+});
+
+Load< BoneInfluenceBuffer > human_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
+	return new BoneInfluenceBuffer(data_path("human.infl"));
+});
+
+Load< SkeletonBuffer > human_skeletons(LoadTagDefault, []() -> SkeletonBuffer const * {
+	return new SkeletonBuffer(data_path("human.skel"));
+});
+
+Load< AnimationBuffer< Skeleton::BoneTransform > > human_animations(LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
+	return new AnimationBuffer< Skeleton::BoneTransform >(data_path("human.anim"));
+});
 
 
 static const char *civilian_mesh_names[] = {
@@ -172,19 +186,21 @@ static const char *civilian_mesh_names[] = {
 	"tongue01",
 };
 
-GLuint civilian_meshes_for_lit_color_texture_program = 0;
+GLuint civilian_for_basic_material_deferred_object = 0;
 Load< MeshBuffer > civilian_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("civilian.pnct"));
-	civilian_meshes_for_lit_color_texture_program =
-		ret->make_vao_for_program(lit_color_texture_program->program);
+	civilian_for_basic_material_deferred_object =
+		ret->make_vao_for_program(basic_material_deferred_object_program->program);
 	return ret;
 });
 
 PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
+PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
+	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
-		if (transform.name == "Human.rigify") enemy = &transform;
+		if (transform.name == "Enemy") enemy = &transform;
 		if (transform.name == "Final_Deer") final_deer = &transform;
 		if (transform.name == "Final_Deer Leg") {
 			final_deer_leg = &transform;
@@ -207,12 +223,11 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 
 	player_base_rotation = player->rotation;
 
-	for (auto &d : scene.drawables) {
-		if (d.transform == enemy &&
-			d.pipeline.vao == zoo_meshes_for_lit_color_texture_program) {
-			d.pipeline.count = 0; // hide old enemy mesh
-		}
-	}
+	// for (auto &d : scene.drawables) {
+	// 	if (d.transform == enemy) {
+	// 		d.pipeline.count = 0; // hide old enemy mesh
+	// 	}
+	// }
 
 	Mesh const &human_mesh = human_meshes->lookup("base.001");
 	Skeleton const &human_skel = human_skeletons->lookup("Human.rigify");
@@ -243,8 +258,8 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 			Mesh const *mesh = &civilian_meshes->lookup(mesh_name);
 			scene.drawables.emplace_back(transform);
 			Scene::Drawable &dr = scene.drawables.back();
-			dr.pipeline = lit_color_texture_program_pipeline;
-			dr.pipeline.vao = civilian_meshes_for_lit_color_texture_program;
+			dr.pipeline = basic_material_deferred_object_program_pipeline;
+			dr.pipeline.vao = civilian_for_basic_material_deferred_object;
 			dr.pipeline.type = mesh->type;
 			dr.pipeline.start = mesh->start;
 			dr.pipeline.count = mesh->count;
@@ -424,7 +439,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			if (dash_skill && !dashing && dash_cooldown_timer <= 0.0f && !game_over) {
 				// Dash direction: camera-forward (on ground plane)
 				glm::mat4x3 cam_frame = player->make_parent_from_local();
-				glm::vec3 frame_forward = -cam_frame[1];       // consistent with your WASD forward
+				glm::vec3 frame_forward = -cam_frame[1]; // consistent with your WASD forward
 				frame_forward.z = 0.0f;
 				if (glm::dot(frame_forward, frame_forward) < 1e-6f) frame_forward = glm::vec3(0.0f, 1.0f, 0.0f);
 				dash_dir = glm::normalize(frame_forward);
@@ -486,20 +501,20 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 
 				// Distance calculation
 				glm::vec3 player_pos = camera->transform->make_world_from_local()[3];
-				glm::vec3 enemy_pos  = enemy->make_world_from_local()[3];
+				glm::vec3 enemy_pos = enemy->make_world_from_local()[3];
 
 				float dist = glm::length(enemy_pos - player_pos);
 				if (dist <= execution_range) {
 					// === EXECUTION SUCCESS ===
 
-				// enemy is dead
+					// enemy is dead
 					enemy_alive = false;
 					execution_mode = false;
 					stalk_charge = 0.0f;
 
 					// instantly make enemy disappear
 					enemy->scale = glm::vec3(0.0f); // shrink to invisible
-					enemy->position.z = -100.0f;    // move far below ground to ensure hidden
+					enemy->position.z = -100.0f;	// move far below ground to ensure hidden
 					kill_count += 1;
 					if (kill_count >= 1) {
 						dash_skill = true;
@@ -526,15 +541,15 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			}
 		}
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-    if (evt.button.button == SDL_BUTTON_RIGHT) {
-        // Toggle OFF:
-        focus_mode = false;
-		stalking = false;  
-        player_speed_factor = 1.0f;
-        target_fovy = base_fovy*2.1f; // restore zoom
-        return true;
-    	}
-	}else if (evt.type == SDL_EVENT_MOUSE_MOTION) {
+		if (evt.button.button == SDL_BUTTON_RIGHT) {
+			// Toggle OFF:
+			focus_mode = false;
+			stalking = false;
+			player_speed_factor = 1.0f;
+			target_fovy = base_fovy * 2.1f; // restore zoom
+			return true;
+		}
+	} else if (evt.type == SDL_EVENT_MOUSE_MOTION) {
 		if (SDL_GetWindowRelativeMouseMode(Mode::window) == true) {
 			glm::vec2 motion = glm::vec2(evt.motion.xrel / float(window_size.y),
 										 -evt.motion.yrel / float(window_size.y));
@@ -596,20 +611,20 @@ void PlayMode::update(float elapsed) {
 	// --- Player movement (WASD, relative to camera) ---
 	{
 		if (dashing) {
-        player->position += dash_dir * dash_speed * elapsed;
-    } else {
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x = -1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y = -1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
+			player->position += dash_dir * dash_speed * elapsed;
+		} else {
+			constexpr float PlayerSpeed = 30.0f;
+			glm::vec2 move = glm::vec2(0.0f);
+			if (left.pressed && !right.pressed) move.x = -1.0f;
+			if (!left.pressed && right.pressed) move.x = 1.0f;
+			if (down.pressed && !up.pressed) move.y = -1.0f;
+			if (!down.pressed && up.pressed) move.y = 1.0f;
 
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
+			if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
 
-		glm::mat4x3 frame = player->make_parent_from_local();
-		glm::vec3 frame_right = -frame[0];
-		glm::vec3 frame_forward = -frame[1];
+			glm::mat4x3 frame = player->make_parent_from_local();
+			glm::vec3 frame_right = -frame[0];
+			glm::vec3 frame_forward = -frame[1];
 
 		// player->position += move.x * frame_right + move.y * frame_forward;
 
@@ -641,14 +656,13 @@ void PlayMode::update(float elapsed) {
 	// --- Enemy on-screen check (clip-space) ---
 	enemy_on_screen = false;
 	if (enemy && enemy_alive) {
-		glm::mat4 clip_from_world = camera->make_projection()
-			* glm::mat4(camera->transform->make_local_from_world());
+		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 		glm::vec3 e_world = enemy->make_world_from_local()[3];
 		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
 		if (clip.w > 0.0f) {
 			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
 			enemy_on_screen = (ndc.x >= -1.0f && ndc.x <= 1.0f &&
-							ndc.y >= -1.0f && ndc.y <= 1.0f);
+							   ndc.y >= -1.0f && ndc.y <= 1.0f);
 		}
 	}
 
@@ -724,9 +738,9 @@ void PlayMode::update(float elapsed) {
 			watched_grace_timer = watched_grace;
 		}
 	}
-	
+
 	// --- Enemy behavior: Stand-and-watch vs Patrol ---
-	
+
 	if (enemy && enemy_alive && !enemy_collapsing) {
 		// Compute planar vector to player for turning:
 		glm::vec2 to_player_xy(0.0f);
@@ -803,7 +817,7 @@ void PlayMode::update(float elapsed) {
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
-	// update camera aspect ratio for drawable:
+	//update camera aspect ratio for drawable:
 	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
 	glm::mat4 world_to_clip = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 	glm::vec3 eye = camera->transform->make_world_from_local()[3];
@@ -1048,23 +1062,25 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	}
 	if (focus_mode && enemy && enemy_visible) {
 		// project enemy world position to clip space:
-		glm::mat4 clip_from_world =
-			camera->make_projection() *
-			glm::mat4(camera->transform->make_local_from_world());
+		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
 		glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
-		glm::vec3 e_world = world_from_enemy[3]; // translation column
-		glm::vec4 e_clip = clip_from_world * glm::vec4(e_world, 1.0f);
+		glm::vec3 e_world = world_from_enemy[3];           // translation column
+		glm::vec4 e_clip  = clip_from_world * glm::vec4(e_world, 1.0f);
 
 		if (e_clip.w > 0.0f) {
 			glm::vec3 e_ndc = glm::vec3(e_clip) / e_clip.w; // [-1,1] range
 			// set up 2D line drawer (same as your text HUD uses)
 			glDisable(GL_DEPTH_TEST);
 			float aspect = float(drawable_size.x) / float(drawable_size.y);
-			DrawLines lines(glm::mat4(1.0f / aspect, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f));
+			DrawLines lines(glm::mat4(
+				1.0f / aspect, 0.0f, 0.0f, 0.0f,
+				0.0f, 1.0f, 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0f, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			));
 
-			// Convert NDC to the DrawLines' coords: x in [-aspect, aspect], y in
-			// [-1,1]
+			// Convert NDC to the DrawLines' coords: x in [-aspect, aspect], y in [-1,1]
 			glm::vec3 p(e_ndc.x * aspect, e_ndc.y, 0.0f);
 
 			// crosshair size (in screen space units):
@@ -1077,23 +1093,33 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 			// "ENEMY" label just above the crosshair:
 			const float H = 0.06f;
-			lines.draw_text("ENEMY", p + glm::vec3(-0.5f * H, +1.4f * H, 0.0f), glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f), col);
+			lines.draw_text("ENEMY",
+				p + glm::vec3(-0.5f * H, +1.4f * H, 0.0f),
+				glm::vec3(H, 0.0f, 0.0f),
+				glm::vec3(0.0f, H, 0.0f),
+				col
+			);
 			glEnable(GL_DEPTH_TEST);
 		}
 	}
 	if (focus_mode && enemy) {
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(1.0f / aspect, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f));
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
 
 		// bar geometry (screen space): centered, near bottom
-		const float bar_w = 1.6f;  // total width
-		const float bar_h = 0.08f; // height
-		const float y = -0.90f;	   // vertical position
-		const float x0 = -0.5f * bar_w;
-		const float x1 = 0.5f * bar_w;
-		const float y0 = y;
-		const float y1 = y + bar_h;
+		const float bar_w = 1.6f;     // total width
+		const float bar_h = 0.08f;    // height
+		const float y     = -0.90f;   // vertical position
+		const float x0    = -0.5f * bar_w;
+		const float x1    =  0.5f * bar_w;
+		const float y0    = y;
+		const float y1    = y + bar_h;
 
 		// outline (light gray)
 		glm::u8vec4 outline(0xcc, 0xcc, 0xcc, 0xff);
@@ -1104,9 +1130,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 		// background (empty) – thin gray center line just for context (optional)
 		glm::u8vec4 back(0x55, 0x55, 0x55, 0xff);
-		lines.draw(glm::vec3(x0, (y0 + y1) * 0.5f, 0.0f),
-				   glm::vec3(x1, (y0 + y1) * 0.5f, 0.0f),
-				   back);
+		lines.draw(glm::vec3(x0, (y0+y1)*0.5f, 0.0f), glm::vec3(x1, (y0+y1)*0.5f, 0.0f), back);
 
 		// FILLED BLACK RECTANGLE that grows with stalk_charge:
 		const float fill_x = x0 + (x1 - x0) * stalk_charge;
@@ -1117,49 +1141,72 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		for (int i = 0; i < stripes; ++i) {
 			float t0 = float(i) / stripes;
 			float y_line = y0 + t0 * bar_h;
-			lines.draw(glm::vec3(x0, y_line, 0.0f), glm::vec3(fill_x, y_line, 0.0f), black);
+			lines.draw(glm::vec3(x0,    y_line, 0.0f),
+					glm::vec3(fill_x, y_line, 0.0f),
+					black);
 		}
 
 		// label
 		const float H = 0.06f;
-		lines.draw_text("STALK", glm::vec3(x0, y1 + 0.02f, 0.0f), glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f), outline);
+		lines.draw_text("STALK",
+			glm::vec3(x0, y1 + 0.02f, 0.0f),
+			glm::vec3(H, 0.0f, 0.0f),
+			glm::vec3(0.0f, H, 0.0f),
+			outline
+		);
 
 		glEnable(GL_DEPTH_TEST);
 	}
 	if (being_watched) {
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(1.0f / aspect, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f));
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
 		// Centered-ish: start slightly left of (0,0)
 		constexpr float H = 0.14f; // text size
 		glm::u8vec4 warn = glm::u8vec4(0xff, 0x40, 0x40, 0xff);
-		lines.draw_text(
-			"You are being watched!",
-			glm::vec3(-0.55f, 0.02f, 0.0f), // tweak to taste for centering
-			glm::vec3(H, 0.0f, 0.0f),		// x step
-			glm::vec3(0.0f, H, 0.0f),		// y step
-			warn);
+		lines.draw_text("You are being watched!",
+			glm::vec3(-0.55f, 0.02f, 0.0f),   // tweak to taste for centering
+			glm::vec3(H, 0.0f, 0.0f),         // x step
+			glm::vec3(0.0f, H, 0.0f),         // y step
+			warn
+		);
 		glEnable(GL_DEPTH_TEST);
 	}
 	
 	if (game_over) {
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(1.0f / aspect, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f));
-		constexpr float H = 0.18f;								 // slightly larger text
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+		constexpr float H = 0.18f; // slightly larger text
 		glm::u8vec4 color = glm::u8vec4(0xff, 0x00, 0x00, 0xff); // bright red
 		lines.draw_text("Zoo has been locked",
-						glm::vec3(-0.7f, 0.0f, 0.0f), // centered-ish position
-						glm::vec3(H, 0.0f, 0.0f),
-						glm::vec3(0.0f, H, 0.0f),
-						color);
+			glm::vec3(-0.7f, 0.0f, 0.0f),  // centered-ish position
+			glm::vec3(H, 0.0f, 0.0f),
+			glm::vec3(0.0f, H, 0.0f),
+			color
+		);
 		glEnable(GL_DEPTH_TEST);
 	}
 	
 	{ //use DrawLines to overlay some text:
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(1.0f / aspect, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f));
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
 
 		constexpr float H = 0.05f;
 		lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
