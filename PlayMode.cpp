@@ -525,7 +525,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 					{
 						// Level completes, gets leg // TODO: add some effect; and deer needs to attack enemy before geting their leg
 						final_deer->scale = glm::vec3(0.0f); // hide original deer
-						final_deer_leg->scale = glm::vec3(1.0f);
+						final_deer_leg->scale = glm::vec3(0.7f);
 						deer_stage = 1;
 					}
 
