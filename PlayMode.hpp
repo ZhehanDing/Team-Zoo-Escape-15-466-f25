@@ -46,10 +46,17 @@ struct PlayMode : Mode {
 	float zoom_speed = 3.0f; 
 	float stalk_charge = 0.0f;
 	// rate per second:
-	float stalk_charge_rate = 0.05f;   // fills while holding RMB
-	float stalk_decay_rate = 0.025f;    // drains when not holding
+	float stalk_charge_rate = 0.2f;   // fills while holding RMB
+	// float stalk_decay_rate = 0.025f;    // drains when not holding
 	bool  stalking = false;           // true while RMB is held
 	bool enemy_visible = true; // updated in draw(), used in next update()
+	bool enemy_on_screen = false;	// NEW: updated in update() via clip-space test
+
+	//Excution mode
+	bool execution_mode = false;        // Trigger
+	bool enemy_alive = true;            // Detect is alive or not
+	float execution_range = 10.0f;       // excution area
+
 	// --- enemy patrol ---
 	std::vector<glm::vec3> enemy_waypoints;
 	size_t enemy_wp_idx = 0;
@@ -71,4 +78,30 @@ struct PlayMode : Mode {
 	bool  game_over = false;             // simple game-over latch
 
 	void trigger_game_over();            // declare handler
+
+	// Enemy collapse animation (after execution)
+	bool enemy_collapsing = false;
+	float enemy_collapse_t = 0.0f;
+	float enemy_collapse_duration = 0.7f; // seconds
+	glm::quat enemy_collapse_start;
+	glm::quat enemy_collapse_end;
+	//UI
+	GLuint deer_ui_tex = 0;        // 
+	glm::uvec2 deer_ui_size = glm::uvec2(0); //
+
+	GLuint deer_ui_vao = 0;        // 
+	GLuint deer_ui_vbo = 0;
+
+	float deer_ui_target_width_px = 160.0f; //  128/160/192 
+	// Kill count & Dash skill unlock
+	int kill_count = 0;
+	bool dash_skill = false;
+	bool  dashing = false;
+	float dash_timer = 0.0f;       // remaining dash time (sec)
+	float dash_duration = 0.18f;   // how long a dash lasts
+	float dash_cooldown_timer = 0.0f;
+	float dash_cooldown = 0.8f;    // time before dash can be used again
+	float dash_speed = 55.0f;      // units/sec while dashing
+	glm::vec3 dash_dir = glm::vec3(0.0f); // world-space direction of dash
+
 };

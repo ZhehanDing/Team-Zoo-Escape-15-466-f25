@@ -1,11 +1,13 @@
 #include "PlayMode.hpp"
-
+#include <algorithm>
+#include <cmath>
 #include "LitColorTextureProgram.hpp"
 
 #include "DrawLines.hpp"
 #include "Mesh.hpp"
 #include "Load.hpp"
 #include "gl_errors.hpp"
+#include "load_save_png.hpp"
 #include "data_path.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
@@ -80,6 +82,61 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 	};
 	enemy_wp_idx = 0;
 	enemy_wait_timer = 0.0f;
+	/*
+	{
+		std::vector<glm::u8vec4> pixels;
+		glm::uvec2 size(0);
+
+		// 把 deer UI.png 放到可被 data_path() 找到的位置（和 .scene/.pnct 同级 assets）
+		// 如果你要临时从绝对路径读，也可直接写全路径。
+		load_png(data_path("deer UI.png"), &size, &pixels, LowerLeftOrigin);
+		deer_ui_size = size; // 记录像素尺寸
+
+		glGenTextures(1, &deer_ui_tex);
+		glBindTexture(GL_TEXTURE_2D, deer_ui_tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // UI 不用 mipmap
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
+			int(size.x), int(size.y), 0,
+			GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+
+	// ---------- NEW: 为屏幕空间四边形准备 VAO/VBO ----------
+	{
+		glGenVertexArrays(1, &deer_ui_vao);
+		glGenBuffers(1, &deer_ui_vbo);
+
+		glBindVertexArray(deer_ui_vao);
+		glBindBuffer(GL_ARRAY_BUFFER, deer_ui_vbo);
+
+		// 顶点格式：pos(x,y), uv(u,v) — 4 个 float
+		// 先占位 6 个顶点（两个三角形），每帧只更新数据
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_DRAW);
+
+		// 取用 LitColorTextureProgram 的属性位置：
+		GLint pos_loc = glGetAttribLocation(lit_color_texture_program->program, "Position");
+		GLint uv_loc  = glGetAttribLocation(lit_color_texture_program->program, "TexCoord");
+
+		// 有些版本 Position 是 vec4，这里以 vec2 启用即可（剩余分量由 shader 补 0/1）
+		glEnableVertexAttribArray(GLuint(pos_loc));
+		glVertexAttribPointer(GLuint(pos_loc), 2, GL_FLOAT, GL_FALSE, sizeof(float)*4, (GLvoid*)0);
+
+		glEnableVertexAttribArray(GLuint(uv_loc));
+		glVertexAttribPointer(GLuint(uv_loc), 2, GL_FLOAT, GL_FALSE, sizeof(float)*4, (GLvoid*)(sizeof(float)*2));
+
+		// 给 Normal/Color 设置常量值，避免 shader 里参与光照时报 0：
+		GLint n_loc = glGetAttribLocation(lit_color_texture_program->program, "Normal");
+		if (n_loc >= 0) { glDisableVertexAttribArray(GLuint(n_loc)); glVertexAttrib3f(GLuint(n_loc), 0.f, 0.f, 1.f); }
+		GLint c_loc = glGetAttribLocation(lit_color_texture_program->program, "Color");
+		if (c_loc >= 0) { glDisableVertexAttribArray(GLuint(c_loc)); glVertexAttrib3f(GLuint(c_loc), 1.f, 1.f, 1.f); }
+
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+	}*/
 }
 
 void PlayMode::trigger_game_over() {
@@ -89,6 +146,11 @@ void PlayMode::trigger_game_over() {
 }
 
 PlayMode::~PlayMode() {
+	/*	// NEW: 释放 deer UI 资源
+	if (deer_ui_tex) glDeleteTextures(1, &deer_ui_tex);
+	if (deer_ui_vbo) glDeleteBuffers(1, &deer_ui_vbo);
+	if (deer_ui_vao) glDeleteVertexArrays(1, &deer_ui_vao);
+	*/
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
@@ -112,6 +174,29 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		} else if (evt.key.key == SDLK_S) {
 			down.downs += 1;
 			down.pressed = true;
+			return true;
+		} else if (evt.key.key == SDLK_LCTRL) {
+			if (stalk_charge >= 1.0f && enemy_alive) {
+            execution_mode = true;
+            return true;
+        	}
+		}else if (evt.key.key == SDLK_SPACE) {
+			// Start dash if unlocked, not already dashing, and off cooldown
+			if (dash_skill && !dashing && dash_cooldown_timer <= 0.0f && !game_over) {
+				// Dash direction: camera-forward (on ground plane)
+				glm::mat4x3 cam_frame = player->make_parent_from_local();
+				glm::vec3 frame_forward = -cam_frame[1];       // consistent with your WASD forward
+				frame_forward.z = 0.0f;
+				if (glm::dot(frame_forward, frame_forward) < 1e-6f) frame_forward = glm::vec3(0.0f, 1.0f, 0.0f);
+				dash_dir = glm::normalize(frame_forward);
+
+				dashing = true;
+				dash_timer = dash_duration;
+				dash_cooldown_timer = dash_cooldown;
+
+				// Optional: slight FOV punch-in while dashing
+				target_fovy = base_fovy * 0.85f;
+			}
 			return true;
 		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
@@ -140,6 +225,38 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			player_speed_factor = 0.2f;     // slow to 50%
 			target_fovy = base_fovy * 0.7f; // zoom in a bit
 			return true;
+		} else if (evt.button.button == SDL_BUTTON_LEFT) {
+			if (execution_mode) {
+
+				// Distance calculation
+				glm::vec3 player_pos = camera->transform->make_world_from_local()[3];
+				glm::vec3 enemy_pos  = enemy->make_world_from_local()[3];
+
+				float dist = glm::length(enemy_pos - player_pos);
+				if (dist <= execution_range) {
+					// === EXECUTION SUCCESS ===
+
+				// enemy is dead
+					enemy_alive = false;
+					execution_mode = false;
+					stalk_charge = 0.0f;
+
+					// instantly make enemy disappear
+					enemy->scale = glm::vec3(0.0f); // shrink to invisible
+					enemy->position.z = -100.0f;    // move far below ground to ensure hidden
+					kill_count += 1;
+					if (kill_count >= 1) {
+						dash_skill = true;
+					} else if (kill_count >= 2) {
+						dash_skill = true;
+					}
+
+					return true;
+				} else {
+					// Not in distance
+					return true;
+				}
+			}
 		}
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP) {
     if (evt.button.button == SDL_BUTTON_RIGHT) {
@@ -147,7 +264,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
         focus_mode = false;
 		stalking = false;  
         player_speed_factor = 1.0f;
-        target_fovy = base_fovy; // restore zoom
+        target_fovy = base_fovy*2.1f; // restore zoom
         return true;
     	}
 	}else if (evt.type == SDL_EVENT_MOUSE_MOTION) {
@@ -172,10 +289,39 @@ void PlayMode::update(float elapsed) {
 		// camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 		return;
 	}
+
+	// --- Dash timers ---
+	if (dash_cooldown_timer > 0.0f) {
+		dash_cooldown_timer = std::max(0.0f, dash_cooldown_timer - elapsed);
+	}
+	if (dashing) {
+		dash_timer -= elapsed;
+		if (dash_timer <= 0.0f) {
+			dashing = false;
+			target_fovy = base_fovy; // restore zoom after dash
+		}
+	}
+
+	// --- Enemy collapse animation (after execution) ---
+	if (enemy && enemy_collapsing) {
+		enemy_collapse_t += elapsed;
+		float t = enemy_collapse_t / enemy_collapse_duration;
+		if (t > 1.0f) t = 1.0f;
+
+		// simple slerp from standing to “lying” pose
+		enemy->rotation = glm::slerp(enemy_collapse_start, enemy_collapse_end, t);
+
+		if (t >= 1.0f) {
+			enemy_collapsing = false; // finished collapsing
+		}
+	}
 	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 
 	// --- Player movement (WASD, relative to camera) ---
 	{
+		if (dashing) {
+        player->position += dash_dir * dash_speed * elapsed;
+    } else {
 		constexpr float PlayerSpeed = 30.0f;
 		glm::vec2 move = glm::vec2(0.0f);
 		if (left.pressed  && !right.pressed) move.x = -1.0f;
@@ -190,16 +336,28 @@ void PlayMode::update(float elapsed) {
 		glm::vec3 frame_forward = -frame[1];
 
 		player->position += move.x * frame_right + move.y * frame_forward;
+		}
+	}
+
+	// --- Enemy on-screen check (clip-space) ---
+	enemy_on_screen = false;
+	if (enemy && enemy_alive) {
+		glm::mat4 clip_from_world = camera->make_projection()
+			* glm::mat4(camera->transform->make_local_from_world());
+		glm::vec3 e_world = enemy->make_world_from_local()[3];
+		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
+		if (clip.w > 0.0f) {
+			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
+			enemy_on_screen = (ndc.x >= -1.0f && ndc.x <= 1.0f &&
+							ndc.y >= -1.0f && ndc.y <= 1.0f);
+		}
 	}
 
 	// --- Stalk bar charge/decay (depends on enemy on-screen visibility) ---
-	if (stalking && enemy_visible) {
+	if (stalking && enemy_on_screen && enemy_visible) {
 		stalk_charge += stalk_charge_rate * elapsed;
 		if (stalk_charge > 1.0f) stalk_charge = 1.0f;
-	} else {
-		stalk_charge -= stalk_decay_rate * elapsed;
-		if (stalk_charge < 0.0f) stalk_charge = 0.0f;
-	}
+	} 
 
 	if (stalk_charge >= 1.0f) {
 		if (deer_stage == 0) {
@@ -280,9 +438,10 @@ void PlayMode::update(float elapsed) {
 			watched_grace_timer = watched_grace;
 		}
 	}
-
+	
 	// --- Enemy behavior: Stand-and-watch vs Patrol ---
-	if (enemy) {
+	
+	if (enemy && enemy_alive && !enemy_collapsing) {
 		// Compute planar vector to player for turning:
 		glm::vec2 to_player_xy(0.0f);
 		float to_player_dist = 0.0f;
@@ -363,6 +522,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	if (focus_mode) {
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // stark white background for high contrast
+	} else if (execution_mode) {
+	glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // red background during execution mode
 	} else {
 		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
 	}
@@ -373,50 +534,33 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
 
 	scene.draw(*camera);
-	enemy_visible = true; // default
+	enemy_visible = false; // default
 
-	
-	if (enemy) {
-		// Project enemy position to screen:
-		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-		glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
-		glm::vec3 e_world = world_from_enemy[3];
-
+	if (enemy && enemy_alive) {
+		glm::mat4 clip_from_world = camera->make_projection()
+			* glm::mat4(camera->transform->make_local_from_world());
+		glm::vec3 e_world = enemy->make_world_from_local()[3];
 		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
+
 		if (clip.w > 0.0f) {
 			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
-			// Window coords (pixels):
-			float sx = (ndc.x * 0.5f + 0.5f) * drawable_size.x;
-			float sy = (ndc.y * 0.5f + 0.5f) * drawable_size.y;
-			float enemy_depth = ndc.z * 0.5f + 0.5f; // [0,1]
+			// Outside of screen
+			if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f) {
+				enemy_visible = false;
+			} else {
+				float sx = (ndc.x * 0.5f + 0.5f) * drawable_size.x;
+				float sy = (ndc.y * 0.5f + 0.5f) * drawable_size.y;
+				int px = std::clamp(int(std::lround(sx)), 0, int(drawable_size.x) - 1);
+				int py = std::clamp(int(std::lround(sy)), 0, int(drawable_size.y) - 1);
 
-			// Sample a small box around the enemy (e.g., ~20px radius):
-			const int radius = 20;
-			const int step   = 10;  // stride between samples
-			const float eps  = 1e-3f;
+				float depth_sample = 1.0f;
+				glReadPixels(px, py, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth_sample);
 
-			int total = 0;
-			int occluded = 0;
+				float enemy_depth = ndc.z * 0.5f + 0.5f;
+				const float eps = 1e-3f;
 
-			for (int dy = -radius; dy <= radius; dy += step) {
-				for (int dx = -radius; dx <= radius; dx += step) {
-					int px = int(sx) + dx;
-					int py = int(sy) + dy;
-					if (px < 0 || py < 0 || px >= int(drawable_size.x) || py >= int(drawable_size.y)) continue;
-
-					float depth_sample = 1.0f;
-					glReadPixels(px, py, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth_sample);
-
-					// If the sample depth is *in front of* the enemy (smaller), that point is blocked:
-					if (depth_sample + eps < enemy_depth) occluded++;
-					total++;
-				}
+				enemy_visible = !(depth_sample + eps < enemy_depth);
 			}
-			// "Fully blocked" ≈ all tested points occluded:
-			if (total > 0 && occluded == total) enemy_visible = false;
-		} else {
-			// behind camera
-			enemy_visible = false;
 		}
 	}
 	if (focus_mode && enemy && enemy_visible) {
@@ -516,7 +660,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 		glEnable(GL_DEPTH_TEST);
 	}
-	
 	if (being_watched) {
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
@@ -537,7 +680,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		);
 		glEnable(GL_DEPTH_TEST);
 	}
-	
+
 	if (game_over) {
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
@@ -557,6 +700,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		);
 		glEnable(GL_DEPTH_TEST);
 	}
+	
 	{ //use DrawLines to overlay some text:
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
@@ -578,5 +722,64 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
 	}
+	/*
+	if (deer_ui_tex && deer_ui_size.x && deer_ui_size.y) {
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		float wpx = deer_ui_target_width_px;
+		float hpx = wpx * float(deer_ui_size.y) / float(deer_ui_size.x);
+		const float pad = 8.0f;
+
+		auto px2ndc = [&](float x_px, float y_px)->glm::vec2 {
+			return {
+				(x_px / float(drawable_size.x)) * 2.0f - 1.0f,
+				(y_px / float(drawable_size.y)) * 2.0f - 1.0f
+			};
+		};
+		glm::vec2 p00 = px2ndc(pad,        pad       );
+		glm::vec2 p10 = px2ndc(pad + wpx,  pad       );
+		glm::vec2 p11 = px2ndc(pad + wpx,  pad + hpx );
+		glm::vec2 p01 = px2ndc(pad,        pad + hpx );
+
+		float vtx[6*4] = {
+			p00.x,p00.y, 0,0,  p10.x,p10.y, 1,0,  p11.x,p11.y, 1,1,
+			p00.x,p00.y, 0,0,  p11.x,p11.y, 1,1,  p01.x,p01.y, 0,1
+		};
+
+		glBindBuffer(GL_ARRAY_BUFFER, deer_ui_vbo);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vtx), vtx);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glUseProgram(lit_color_texture_program->program);
+
+		GLint u_obj = glGetUniformLocation(lit_color_texture_program->program, "OBJECT_TO_CLIP");
+		if (u_obj < 0) u_obj = glGetUniformLocation(lit_color_texture_program->program, "OBJECT_TO_CLIP_mat4");
+		if (u_obj >= 0) {
+			glm::mat4 I(1.0f);
+			glUniformMatrix4fv(u_obj, 1, GL_FALSE, glm::value_ptr(I));
+		}
+
+		GLint u_samp = glGetUniformLocation(lit_color_texture_program->program, "COLOR_TEXTURE");
+		if (u_samp >= 0) glUniform1i(u_samp, 0);
+		GLint u_use = glGetUniformLocation(lit_color_texture_program->program, "UseTexture");
+		if (u_use >= 0) glUniform1i(u_use, 1);
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, deer_ui_tex);
+
+		glBindVertexArray(deer_ui_vao);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glBindVertexArray(0);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glUseProgram(0);
+
+		glDisable(GL_BLEND);
+		glEnable(GL_CULL_FACE);
+		glEnable(GL_DEPTH_TEST);
+	}*/
 	GL_ERRORS();
 }
