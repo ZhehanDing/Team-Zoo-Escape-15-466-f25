@@ -196,8 +196,6 @@ Load< MeshBuffer > civilian_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 
 PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
-PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
-	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
 		if (transform.name == "Enemy") enemy = &transform;

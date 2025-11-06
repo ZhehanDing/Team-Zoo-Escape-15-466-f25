@@ -52,8 +52,6 @@ struct BoneInfluenceBuffer {
 };
 
 struct RiggedMesh {
-	GLuint vbo_vert = 0;
-	GLuint vbo_bone = 0;
 	const Mesh &mesh;
 	const Skeleton &skeleton;
 	AnimationGraph< Skeleton::BoneTransform > *anim_graph = nullptr;
@@ -91,5 +89,7 @@ struct RiggedMesh {
 
 	GLuint program = 0;
 
+	GLuint vbo_vert = 0;
+	GLuint vbo_bone = 0;
 	GLuint make_vao_for_program(GLuint program);
 };
