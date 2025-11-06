@@ -159,6 +159,27 @@ struct FB {
 } fb;
 
 
+
+static const char *civilian_mesh_names[] = {
+	"civilian_base",
+	"bob01",
+	"eyebrow001",
+	"eyelashes01",
+	"high-poly",
+	"male_casualsuit06",
+	"shoes_monk_strap_female",
+	"teeth_base",
+	"tongue01",
+};
+
+GLuint civilian_meshes_for_lit_color_texture_program = 0;
+Load< MeshBuffer > civilian_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	MeshBuffer const *ret = new MeshBuffer(data_path("civilian.pnct"));
+	civilian_meshes_for_lit_color_texture_program =
+		ret->make_vao_for_program(lit_color_texture_program->program);
+	return ret;
+});
+
 PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
@@ -212,33 +233,27 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		human_meshes->buffer, human_infls->buffer, human_mesh, *enemy_skeleton, &enemy_graph);
 
 	auto make_civilian = [&](const glm::vec3 &location) {
-		Civilian c;
-
 		scene.transforms.emplace_back();
+		Scene::Transform *transform = &scene.transforms.back();
+		transform->position = location;
+		transform->rotation = glm::quat(1, 0, 0, 0);
+		transform->scale = glm::vec3(1.1f);
 
-		c.transform = &scene.transforms.back();
-		c.transform->position = location;
-		c.transform->rotation = enemy_base_rotation;
-		c.base_rotation = c.transform->rotation;
+		for (const char *mesh_name : civilian_mesh_names) {
+			Mesh const *mesh = &civilian_meshes->lookup(mesh_name);
+			scene.drawables.emplace_back(transform);
+			Scene::Drawable &dr = scene.drawables.back();
+			dr.pipeline = lit_color_texture_program_pipeline;
+			dr.pipeline.vao = civilian_meshes_for_lit_color_texture_program;
+			dr.pipeline.type = mesh->type;
+			dr.pipeline.start = mesh->start;
+			dr.pipeline.count = mesh->count;
+		}
+
+		Civilian c;
+		c.transform = transform;
+		c.base_rotation = transform->rotation;
 		c.start_pos = glm::vec2(location.x, location.y);
-
-		Mesh const &mesh = human_meshes->lookup("base.001");
-		Skeleton const &sk = human_skeletons->lookup("Human.rigify");
-		c.skel = std::make_unique< Skeleton >(sk);
-
-		// c.graph.add_state(human_animations->lookup("Walk"));
-
-		c.rig = std::make_unique< RiggedMesh >(
-			human_meshes->buffer, human_infls->buffer, mesh, *c.skel, &c.graph);
-
-		scene.drawables.emplace_back(c.transform);
-		Scene::Drawable &drawable = scene.drawables.back();
-		drawable.pipeline = skinning_program_pipeline;
-		drawable.pipeline.vao = c.rig->make_vao_for_program(skinning_program->program);
-		drawable.pipeline.type = c.rig->mesh.type;
-		drawable.pipeline.start = c.rig->mesh.start;
-		drawable.pipeline.count = c.rig->mesh.count;
-
 		civilians.emplace_back(std::move(c));
 	};
 
@@ -249,21 +264,21 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		float x = rand(civilians_rng, -10.0f, 10.0f);
 		float y = rand(civilians_rng, -10.0f, 10.0f);
 
-		make_civilian(center + glm::vec3(x, y, 0.0f));
+		make_civilian(center + glm::vec3(x, y, 0.3f));
 	}
 	center = glm::vec3(-5.0f, 0.0f, 0.0f);
 	for (int i = 0; i < 4; i++) {
 		float x = rand(civilians_rng, -10.0f, 10.0f);
 		float y = rand(civilians_rng, -10.0f, 10.0f);
 
-		make_civilian(center + glm::vec3(x, y, 0.0f));
+		make_civilian(center + glm::vec3(x, y, 0.3f));
 	}
-		center = glm::vec3(0.0f, 40.0f, 0.0f);
+	center = glm::vec3(0.0f, 40.0f, 0.0f);
 	for (int i = 0; i < 4; i++) {
 		float x = rand(civilians_rng, -10.0f, 10.0f);
 		float y = rand(civilians_rng, -10.0f, 10.0f);
 
-		make_civilian(center + glm::vec3(x, y, 0.0f));
+		make_civilian(center + glm::vec3(x, y, 0.3f));
 	}
 
 	// populate rigged mesh
