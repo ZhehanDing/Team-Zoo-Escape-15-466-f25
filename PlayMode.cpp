@@ -167,6 +167,11 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		}
 		if (transform.name == "Sky") sky = &transform;
 		if (transform.name == "Gate") gate = &transform;
+		if (transform.name.rfind("Fence", 0) == 0)
+		{ // prefix match
+			fences.push_back(&transform);
+			// printf("Found fence: %s\n", transform.name.c_str());
+		}
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
@@ -494,16 +499,23 @@ void PlayMode::update(float elapsed) {
 		// Define approximate hitboxes (adjust to your model scale)
 		glm::vec3 player_half(1.0f, 1.0f, 1.0f);
 		glm::vec3 gate_half(2.0f, 9.0f, 3.0f);
+		glm::vec3 fence_half(2.0f, 6.0f, 3.0f);
 
 		// Check collisions
 		bool hit_gate = check_collision(new_pos, player_half, gate->position, gate_half);
-
-		if (!hit_gate)
+		bool hit_fence = false;
+		for (auto *f : fences)
 		{
-			player->position = new_pos; // Only move if no collision
-		} else {
-			printf("Collision with gate detected!\n");
+			if (!f)
+				continue;
+			if (check_collision(new_pos, player_half, f->position, fence_half))
+			{
+				hit_fence = true;
+				break;
+			}
 		}
+
+		if (!hit_gate && !hit_fence) player->position = new_pos; // Only move if no collision
 		}
 	}
 

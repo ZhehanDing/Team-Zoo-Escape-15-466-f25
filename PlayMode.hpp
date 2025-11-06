@@ -35,6 +35,7 @@ struct PlayMode : Mode {
 	Scene::Transform *final_deer_leg = nullptr;
 	Scene::Transform *sky = nullptr;
 	Scene::Transform *gate = nullptr;
+	std::vector<Scene::Transform *> fences;
 	int deer_stage = 0; // 0 = original deer, 1 = deer + leg, 2 = ... etc.
 	glm::quat player_base_rotation;
 	
