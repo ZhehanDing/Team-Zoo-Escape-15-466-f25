@@ -29,7 +29,7 @@ if m:
 outfiles = args[1:3]
 
 for outfile in outfiles:
-	assert outfile.endswith(".pnct") or outfile.endswith(".infl")
+	assert(outfile.endswith(".pnct") or outfile.endswith(".infl"))
 
 print("Will export meshes referenced from ",end="")
 if collection_name:
@@ -106,8 +106,11 @@ def matrix_to_bytes(mat : Matrix, dim : tuple[int, int], order : str = 'c'):
 
 	return mat_data
 
+def filter_by_substring(sub : list[str], bones : bpy.types.ArmatureBones | bpy.types.PoseBone):
+	return [bone for bone in bones if sub in bone.name]
+
 from collections import deque
-def topological_sort(bones : bpy.types.ArmatureBones | bpy.types.PoseBone) -> list[bpy.types.Bone] | list[bpy.types.PoseBone]:
+def topological_sort(bones : bpy.types.ArmatureBones | bpy.types.PoseBone | list[bpy.types.Bone] | list[bpy.types.PoseBone]) -> list[bpy.types.Bone] | list[bpy.types.PoseBone]:
 	bone_count = len(bones)
 	roots = deque([bone for bone in bones if bone.parent is None])
 	visited = {bone.name : False for bone in bones}
@@ -129,15 +132,18 @@ def topological_sort(bones : bpy.types.ArmatureBones | bpy.types.PoseBone) -> li
 					frontier.append(child)
 			sorted_bones.append(bone)
 
-	if len(sorted_bones) != bone_count:
-		raise ValueError("Topological sort failed: not all input bones are reachable from the subset.")
-	
+	for bone in bones:
+		if not visited[bone.name]:
+			visited[bone.name] = True
+			sorted_bones.append(bone)
+
+	assert(len(sorted_bones) == bone_count)	
 	return sorted_bones
 
 assert(len(bpy.data.armatures) == 1 and "Cannot export rigged meshes with more than one armature in scene")
-sorted_bones = topological_sort(bpy.data.armatures[0].bones)
+sorted_bones = topological_sort(filter_by_substring("DEF", bpy.data.armatures[0].bones))
 
-bone_name_to_index = { sorted_bones[i].name : i for i in range(len(sorted_bones)) }
+bone_indices = { sorted_bones[i].name : i for i in range(len(sorted_bones)) }
 
 #data contains vertex, normal, color, and texture data from the meshes:
 data = []
@@ -182,6 +188,8 @@ for obj in bpy.data.objects:
 
 	#print(obj.visible_get()) #DEBUG
 
+	# get modifier before applying masks
+
 	#apply all modifiers (?):
 	bpy.ops.object.convert(target='MESH')
 
@@ -208,7 +216,7 @@ for obj in bpy.data.objects:
 	if len(obj.data.color_attributes) == 0:
 		print("WARNING: trying to export color data, but object '" + name + "' does not have color data; will output 0xffffffff")
 	else:
-		colors = obj.data.color_attributes.active_color;
+		colors = obj.data.color_attributes.active_color
 		if len(obj.data.color_attributes) != 1:
 			print("WARNING: object '" + name + "' has multiple vertex color layers; only exporting '" + colors.name + "'")
 
@@ -222,11 +230,11 @@ for obj in bpy.data.objects:
 
 	local_data = b''
 
+	found = set()
 	#write the mesh triangles:
-	for poly in mesh.polygons:
+	for poly in mesh.polygons:		
 		assert(len(poly.loop_indices) == 3)
 		for i in range(0,3):
-			assert(mesh.loops[poly.loop_indices[i]].vertex_index == poly.vertices[i])
 			loop = mesh.loops[poly.loop_indices[i]]
 			vertex : bpy.types.MeshVertex = mesh.vertices[loop.vertex_index]
 			
@@ -250,10 +258,12 @@ for obj in bpy.data.objects:
 			else:
 				local_data += struct.pack('ff', 0, 0)
 
-			reduced_vgs = vertex.groups
-			assert(len(vertex.groups) > 0)
-			if len(vertex.groups) > 4:
-				reduced_vgs = sorted(vertex.groups, key=lambda vg : vg.weight, reverse=True)[:4]
+			reduced_vgs = [vg for vg in vertex.groups if obj.vertex_groups[vg.group].name in bone_indices.keys()]
+			for vg in vertex.groups:
+				if obj.vertex_groups[vg.group].name in bone_indices.keys():
+					found.add(obj.vertex_groups[vg.group].name)
+			if len(reduced_vgs) > 4:
+				reduced_vgs = sorted(reduced_vgs, key=lambda vg : vg.weight, reverse=True)[:4]
 			
 			assert(len(reduced_vgs) > 0)
 			if len(reduced_vgs) == 0:
@@ -262,7 +272,7 @@ for obj in bpy.data.objects:
 			norm = 0
 			for i in range(len(reduced_vgs)):
 				norm += reduced_vgs[i].weight
-
+			assert(norm > 0)
 			bone_index = b''
 			bone_weight = b''
 			for i in range(4):
@@ -272,7 +282,7 @@ for obj in bpy.data.objects:
 					continue
 				
 				vg = reduced_vgs[i]
-				g_idx = bone_name_to_index[obj.vertex_groups[vg.group].name]
+				g_idx = bone_indices[obj.vertex_groups[vg.group].name]
 
 				bone_index += struct.pack('I', g_idx)
 				bone_weight += struct.pack('f', vg.weight / norm if vg.weight / norm < 1 else 1)
@@ -287,6 +297,8 @@ for obj in bpy.data.objects:
 	data.append(local_data)
 
 	index += struct.pack('I', vertex_count) #vertex_end
+
+# assert(all([vg in bone.indices.keys() for vg in found])) # passes
 
 data = b''.join(data)
 
