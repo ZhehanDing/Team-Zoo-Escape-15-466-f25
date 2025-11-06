@@ -20,6 +20,18 @@ Load< MeshBuffer > zoo_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	zoo_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
 	return ret;
 });
+Load< Sound::Sample > attraction_voice_1(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Sound1.wav"));
+});
+Load< Sound::Sample > attraction_voice_2(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Sound2.wav"));
+});
+Load< Sound::Sample > attraction_voice_3(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Sound3.wav"));
+});
+Load< Sound::Sample > attraction_voice_4(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Sound4.wav"));
+});
 
 Load< Scene > zoo_scene(LoadTagDefault, []() -> Scene const * {
 	return new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
@@ -151,6 +163,13 @@ PlayMode::~PlayMode() {
 	if (deer_ui_vbo) glDeleteBuffers(1, &deer_ui_vbo);
 	if (deer_ui_vao) glDeleteVertexArrays(1, &deer_ui_vao);
 	*/
+	attraction_sounds = {
+		attraction_voice_1,  // implicit convert to Sound::Sample const *
+		attraction_voice_2,
+		attraction_voice_3,
+		attraction_voice_4
+	};
+
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
@@ -195,7 +214,24 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				dash_cooldown_timer = dash_cooldown;
 
 				// Optional: slight FOV punch-in while dashing
-				target_fovy = base_fovy * 0.85f;
+				target_fovy = base_fovy * 2.1f;
+			}
+			return true;
+		}else if (evt.key.key == SDLK_G) {
+			if (attraction_ability && attraction_cooldown_timer <= 0.0f && !game_over) {
+				if (!attraction_sounds.empty()) {
+					std::uniform_int_distribution<int> dist(0, int(attraction_sounds.size()) - 1);
+					int idx = dist(rng);
+
+					// Play voice sound (non-3D version)
+					Sound::play(*attraction_sounds[idx], 1.0f, 1.0f);
+
+					// Optional 3D positional version:
+					// glm::vec3 p = player->make_world_from_local()[3];
+					// Sound::play_3D(*attraction_sounds[idx], p, 1.0f, 1.0f);
+
+					attraction_cooldown_timer = attraction_cooldown;
+				}
 			}
 			return true;
 		}
@@ -249,6 +285,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 						dash_skill = true;
 					} else if (kill_count >= 2) {
 						dash_skill = true;
+						attraction_ability = true;
 					}
 
 					return true;

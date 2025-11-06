@@ -5,7 +5,7 @@
 #include "Camera.hpp"
 
 #include <glm/glm.hpp>
-
+#include <random>
 #include <vector>
 #include <deque>
 
@@ -96,6 +96,7 @@ struct PlayMode : Mode {
 	// Kill count & Dash skill unlock
 	int kill_count = 0;
 	bool dash_skill = false;
+	bool attraction_ability = false;  // unlocked after killing at least 2 enemies
 	bool  dashing = false;
 	float dash_timer = 0.0f;       // remaining dash time (sec)
 	float dash_duration = 0.18f;   // how long a dash lasts
@@ -103,5 +104,10 @@ struct PlayMode : Mode {
 	float dash_cooldown = 0.8f;    // time before dash can be used again
 	float dash_speed = 55.0f;      // units/sec while dashing
 	glm::vec3 dash_dir = glm::vec3(0.0f); // world-space direction of dash
+	//
+	std::vector<Sound::Sample const *> attraction_sounds; // <-- use raw pointers
+	std::mt19937 rng{123456u};       // simple RNG; you can seed with time if you want
+	float attraction_cooldown_timer = 0.0f;
+	float attraction_cooldown = 0.6f; // avoid accidental audio spam
 
 };
