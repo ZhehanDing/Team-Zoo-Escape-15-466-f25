@@ -307,11 +307,11 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			down.downs += 1;
 			down.pressed = true;
 			return true;
-		} else if (evt.key.key == SDLK_LCTRL) {
-			if (stalk_charge >= 1.0f && enemy_alive) {
-            execution_mode = true;
-            return true;
-        	}
+		// } else if (evt.key.key == SDLK_LCTRL) {
+		// 	if (stalk_charge >= 1.0f && enemy_alive) {
+        //     execution_mode = true;
+        //     return true;
+        // 	}
 		}else if (evt.key.key == SDLK_SPACE) {
 			// Start dash if unlocked, not already dashing, and off cooldown
 			if (dash_skill && !dashing && dash_cooldown_timer <= 0.0f && !game_over) {
@@ -401,8 +401,18 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 						attraction_ability = true;
 					}
 
+					if (deer_stage == 0)
+					{
+						// Level completes, gets leg // TODO: add some effect; and deer needs to attack enemy before geting their leg
+						final_deer->scale = glm::vec3(0.0f); // hide original deer
+						final_deer_leg->scale = glm::vec3(1.0f);
+						deer_stage = 1;
+					}
+
 					return true;
-				} else {
+				}
+				else
+				{
 					// Not in distance
 					return true;
 				}
@@ -536,26 +546,11 @@ void PlayMode::update(float elapsed) {
 	// --- Stalk bar charge/decay (depends on enemy on-screen visibility) ---
 	if (stalking && enemy_on_screen && enemy_visible) {
 		stalk_charge += stalk_charge_rate * elapsed;
-		if (stalk_charge > 1.0f) stalk_charge = 1.0f;
+		if (stalk_charge > 1.0f) {
+			stalk_charge = 1.0f;
+            execution_mode = true;
+		}
 	} 
-
-	if (stalk_charge >= 1.0f) {
-		if (deer_stage == 0) {
-			// Level completes, gets leg // TODO: add some effect; and deer needs to attack enemy before geting their leg
-			final_deer->scale = glm::vec3(0.0f); // hide original deer
-			final_deer_leg->scale = glm::vec3(1.0f);
-			deer_stage = 1;
-		}
-	}
-
-	if (stalk_charge >= 1.0f) {
-		if (deer_stage == 0) {
-			// Level completes, gets leg // TODO: add some effect; and deer needs to attack enemy before geting their leg
-			final_deer->scale = glm::vec3(0.0f); // hide original deer
-			final_deer_leg->scale = glm::vec3(1.0f);
-			deer_stage = 1;
-		}
-	}
 
 	// --- Enemy sensing: FOV + distance (+ optional LOS hook) ---
 	being_watched = false;
