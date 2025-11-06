@@ -64,10 +64,10 @@ struct RiggedMesh {
 		GLuint vbo_bone, 
 		const Mesh &mesh, 
 		const Skeleton &skeleton) 
-		: vbo_vert(vbo_vert), 
-		  vbo_bone(vbo_bone), 
-		  mesh(mesh), 
-		  skeleton(skeleton) 
+		: mesh(mesh),
+		  skeleton(skeleton),
+		  vbo_vert(vbo_vert),
+		  vbo_bone(vbo_bone)
 		{ assert(vbo_vert > 0 && vbo_bone > 0); };
 	RiggedMesh(
 		GLuint vbo_vert, 
@@ -75,11 +75,11 @@ struct RiggedMesh {
 		const Mesh &mesh,
 		const Skeleton &skeleton, 
 		AnimationGraph< Skeleton::BoneTransform > *anim_graph) 
-		: vbo_vert(vbo_vert), 
-		  vbo_bone(vbo_bone), 
-		  mesh(mesh), 
-		  skeleton(skeleton), 
-		  anim_graph(anim_graph) 
+		: mesh(mesh),
+		  skeleton(skeleton),
+		  anim_graph(anim_graph),
+		  vbo_vert(vbo_vert),
+		  vbo_bone(vbo_bone)
 		{ assert(vbo_vert > 0 && vbo_bone > 0); };
 
 	// binds the mesh to the skeleton via bone weight information

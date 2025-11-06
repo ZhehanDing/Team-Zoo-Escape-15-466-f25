@@ -6,6 +6,10 @@
 #include "Camera.hpp"
 
 #include <glm/glm.hpp>
+#include <random>
+#include <vector>
+#include <deque>
+
 
 #include "Animation.hpp"
 #include "Mode.hpp"
@@ -13,7 +17,7 @@
 #include "Skeleton.hpp"
 #include <deque>
 #include <vector>
-#include <deque>
+#include "Civilian.hpp" 
 
 struct PlayMode : Mode {
 	PlayMode();
@@ -36,19 +40,20 @@ struct PlayMode : Mode {
 	// local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
 
+	std::vector<Civilian> civilians;
+
 	Scene::Transform *player = nullptr;
 	Scene::Transform *enemy = nullptr;
 	Scene::Transform *final_deer = nullptr;
 	Scene::Transform *final_deer_leg = nullptr;
+	Scene::Transform *sky = nullptr;
+	Scene::Transform *gate = nullptr;
+	std::vector<Scene::Transform *> fences;
 	int deer_stage = 0; // 0 = original deer, 1 = deer + leg, 2 = ... etc.
 	glm::quat player_base_rotation;
 
 	std::unique_ptr< Skeleton > enemy_skeleton;
 	std::unique_ptr< RiggedMesh > enemy_rig;
-	// temp, human composed of multiple meshes
-	std::unique_ptr< RiggedMesh > enemy_clothes;
-	std::unique_ptr< RiggedMesh > enemy_shoes;
-	// end temp
 	AnimationGraph< Skeleton::BoneTransform > enemy_graph =
 		AnimationGraph< Skeleton::BoneTransform >(
 			[](Skeleton::BoneTransform const &a,
@@ -68,10 +73,17 @@ struct PlayMode : Mode {
 	float zoom_speed = 3.0f;
 	float stalk_charge = 0.0f;
 	// rate per second:
-	float stalk_charge_rate = 0.05f; // fills while holding RMB
-	float stalk_decay_rate = 0.025f; // drains when not holding
-	bool stalking = false;			 // true while RMB is held
-	bool enemy_visible = true;		 // updated in draw(), used in next update()
+	float stalk_charge_rate = 0.2f;   // fills while holding RMB
+	// float stalk_decay_rate = 0.025f;    // drains when not holding
+	bool  stalking = false;           // true while RMB is held
+	bool enemy_visible = true; // updated in draw(), used in next update()
+	bool enemy_on_screen = false;	// NEW: updated in update() via clip-space test
+
+	//Excution mode
+	bool execution_mode = false;        // Trigger
+	bool enemy_alive = true;            // Detect is alive or not
+	float execution_range = 10.0f;       // excution area
+
 	// --- enemy patrol ---
 	std::vector< glm::vec3 > enemy_waypoints;
 	size_t enemy_wp_idx = 0;
@@ -93,5 +105,36 @@ struct PlayMode : Mode {
 	float watch_to_gameover = 5.0f; // threshold (seconds)
 	bool game_over = false;			// simple game-over latch
 
-	void trigger_game_over(); // declare handler
+	void trigger_game_over();            // declare handler
+
+	// Enemy collapse animation (after execution)
+	bool enemy_collapsing = false;
+	float enemy_collapse_t = 0.0f;
+	float enemy_collapse_duration = 0.7f; // seconds
+	glm::quat enemy_collapse_start;
+	glm::quat enemy_collapse_end;
+	//UI
+	GLuint deer_ui_tex = 0;        // 
+	glm::uvec2 deer_ui_size = glm::uvec2(0); //
+
+	GLuint deer_ui_vao = 0;        // 
+	GLuint deer_ui_vbo = 0;
+
+	float deer_ui_target_width_px = 160.0f; //  128/160/192 
+	// Kill count & Dash skill unlock
+	int kill_count = 0;
+	bool dash_skill = false;
+	bool attraction_ability = false;  // unlocked after killing at least 2 enemies
+	bool  dashing = false;
+	float dash_timer = 0.0f;       // remaining dash time (sec)
+	float dash_duration = 0.18f;   // how long a dash lasts
+	float dash_cooldown_timer = 0.0f;
+	float dash_cooldown = 0.8f;    // time before dash can be used again
+	float dash_speed = 55.0f;      // units/sec while dashing
+	glm::vec3 dash_dir = glm::vec3(0.0f); // world-space direction of dash
+	//
+	std::vector<Sound::Sample const *> attraction_sounds; // <-- use raw pointers
+	std::mt19937 rng{123456u};       // simple RNG; you can seed with time if you want
+	float attraction_cooldown_timer = 0.0f;
+	float attraction_cooldown = 0.6f; // avoid accidental audio spam
 };

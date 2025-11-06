@@ -266,6 +266,9 @@ for obj in bpy.data.objects:
 				reduced_vgs = sorted(reduced_vgs, key=lambda vg : vg.weight, reverse=True)[:4]
 			
 			assert(len(reduced_vgs) > 0)
+			if len(reduced_vgs) == 0:
+				reduced_vgs = [vertex.groups[0]] if len(vertex.groups) > 0 else []
+
 			norm = 0
 			for i in range(len(reduced_vgs)):
 				norm += reduced_vgs[i].weight

@@ -19,6 +19,9 @@ How To Play:
 ```
 /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.scene
 
+/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rigged_meshes.py -- scenes/zoo_nolink.blend:Main dist/Gate.pnct dist/Gate.infl
+/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rig.py          -- scenes/zoo_nolink.blend:Main dist/Gate.skel dist/Gate.anim
+
 node Maekfile.js && dist/game
 ```
 
@@ -29,6 +32,15 @@ Low Poly Evergreen Tree Tall 2: https://www.blenderkit.com/get-blenderkit/ad5bf1
 Cobblestone road: https://www.blenderkit.com/get-blenderkit/c71aae1e-fa64-4454-85e0-4f76b49b9a7b/
 Street lamp: https://www.blenderkit.com/get-blenderkit/58ed8a12-f81f-4f24-ba5b-de43e1d6baf8/
 Man model for separate body parts: https://www.fab.com/listings/65434ad8-bfd3-466d-bc4f-6319ec3366f8
+Fence Segment: https://www.blenderkit.com/get-blenderkit/0470ca8c-0719-4404-a4ef-47794852264e/
+deer dead body: https://sketchfab.com/3d-models/deer-dead-body-832225752ec84608b9fa7643b764d79c
+Dead rat: https://sketchfab.com/3d-models/dead-rat-f0690b4bf5a940a385556b43dda4dad7
+Vintage Street Lamp: https://www.blenderkit.com/get-blenderkit/d585a3d2-6677-4de6-a3e4-81b89486253a/
+Park Bench: https://www.blenderkit.com/get-blenderkit/0e35aec5-21cf-4e03-883e-008756e7d8bf/
+No Parking Sign Board: https://www.blenderkit.com/get-blenderkit/40bd752c-0163-4482-8298-0fe9e0aec7a4/
+Iron gate: https://www.blenderkit.com/get-blenderkit/cc604c67-711c-4645-bdd6-4d8655dffdc1/
+Brick and Wroute Iron Fence Segment: https://www.blenderkit.com/get-blenderkit/7865ad3b-ae62-403e-80d4-99ea9fa49789/
+MPFB Blender extension for human assets: https://static.makehumancommunity.org/mpfb.html
 
 This game was built with [NEST](NEST.md).
 
