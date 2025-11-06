@@ -48,7 +48,7 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
 	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
 
-	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name) {
+	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
@@ -63,10 +63,10 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		drawable.pipeline.count = mesh.count;
 
 		float roughness = 1.0f;
-		if (transform->name.substr(0, 9) == "Icosphere") { // TODO: change name
+		if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
 			roughness = (transform->position.y + 10.0f) / 18.0f;
 		}
-		drawable.pipeline.set_uniforms = [roughness]() {
+		drawable.pipeline.set_uniforms = [roughness](){
 			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
 		};
 	});
@@ -814,6 +814,7 @@ void PlayMode::update(float elapsed) {
 	left.downs = right.downs = up.downs = down.downs = 0;
 }
 
+
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	//update camera aspect ratio for drawable:
 	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
@@ -1006,9 +1007,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	} else {
 		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
 	}
-	glClearDepth(1.0f); // 1.0 is actually the default value to clear the depth
-						// buffer to, but FYI you can change it.
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// We already have the lit color on the default framebuffer.
 	// Now we only want depth, so disable color writes:
@@ -1016,8 +1014,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
 	glDepthMask(GL_TRUE);
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-	glDepthFunc(GL_LESS); // this is the default depth comparison function, but
-						  // FYI you can change it.
 
 	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
 	glClear(GL_DEPTH_BUFFER_BIT); // clears depth only (color is masked off)
@@ -1175,7 +1171,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		);
 		glEnable(GL_DEPTH_TEST);
 	}
-	
+
 	if (game_over) {
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
