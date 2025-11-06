@@ -1,7 +1,10 @@
 #include "PlayMode.hpp"
 #include <algorithm>
 #include <cmath>
-#include "LitColorTextureProgram.hpp"
+// #include "LitColorTextureProgram.hpp"
+#include "BasicMaterialDeferredProgram.hpp"
+#include "LightMeshes.hpp"
+#include "CopyToScreenProgram.hpp"
 
 #include "DrawLines.hpp"
 #include "Mesh.hpp"
@@ -9,15 +12,19 @@
 #include "gl_errors.hpp"
 #include "load_save_png.hpp"
 #include "data_path.hpp"
+#include "check_fb.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 
 #include <random>
 
-GLuint zoo_meshes_for_lit_color_texture_program = 0;
+GLuint zoo_for_basic_material_deferred_object = 0;
+GLuint light_for_basic_material_deferred_light = 0;
+// GLuint zoo_meshes_for_lit_color_texture_program = 0;
+
 Load< MeshBuffer > zoo_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("zoo_nolink.pnct"));
-	zoo_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+	zoo_for_basic_material_deferred_object = ret->make_vao_for_program(basic_material_deferred_object_program->program);
 	return ret;
 });
 Load< Sound::Sample > attraction_voice_1(LoadTagDefault, []() -> Sound::Sample const * {
@@ -33,25 +40,122 @@ Load< Sound::Sample > attraction_voice_4(LoadTagDefault, []() -> Sound::Sample c
 	return new Sound::Sample(data_path("Sound4.wav"));
 });
 
-Load< Scene > zoo_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
+	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
+	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
+
+	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
 		Scene::Drawable &drawable = scene.drawables.back();
 
-		drawable.pipeline = lit_color_texture_program_pipeline;
+		// drawable.pipeline = lit_color_texture_program_pipeline;
+		drawable.pipeline = basic_material_deferred_object_program_pipeline;
 
-		drawable.pipeline.vao = zoo_meshes_for_lit_color_texture_program;
+		drawable.pipeline.vao = zoo_for_basic_material_deferred_object;
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
 
+		float roughness = 1.0f;
+		if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
+			roughness = (transform->position.y + 10.0f) / 18.0f;
+		}
+		drawable.pipeline.set_uniforms = [roughness](){
+			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
+		};
 	});
+
+	return ret;
 });
 
+//Helper: maintain a framebuffer to hold rendered geometry
+struct FB {
+	//object data gets stored in these textures:
+	GLuint position_tex = 0;
+	GLuint normal_roughness_tex = 0;
+	GLuint albedo_tex = 0;
+	
+	//output image gets written to this texture:
+	GLuint output_tex = 0;
 
-PlayMode::PlayMode() : scene(*zoo_scene) {
+	//depth buffer is shared between objects + lights pass:
+	GLuint depth_rb = 0;
+
+	GLuint objects_fb = 0; //(position, normal, albedo) + depth
+	GLuint lights_fb = 0; //(output) + depth
+
+	glm::uvec2 size = glm::uvec2(0);
+
+	void resize(glm::uvec2 const &drawable_size) {
+		if (drawable_size == size) return;
+		size = drawable_size;
+
+		//helper to allocate a texture:
+		auto alloc_tex = [&](GLuint &tex, GLenum internal_format) {
+			if (tex == 0) glGenTextures(1, &tex);
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexImage2D(GL_TEXTURE_2D, 0, internal_format, size.x, size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		};
+
+		//set up position_tex as a 32-bit floating point RGB texture:
+		alloc_tex(position_tex, GL_RGB32F);
+
+		//set up normal_roughness_tex as a 16-bit floating point RGBA texture:
+		alloc_tex(normal_roughness_tex, GL_RGBA16F);
+
+		//set up albedo_tex as an 8-bit fixed point RGBA texture:
+		alloc_tex(albedo_tex, GL_RGBA8);
+
+		//set up output_tex as an 8-bit fixed point RGBA texture:
+		alloc_tex(output_tex, GL_RGBA8);
+
+		//if depth_rb does not have a name, name it:
+		if (depth_rb == 0) glGenRenderbuffers(1, &depth_rb);
+		//set up depth_rb as a 24-bit fixed-point depth buffer:
+		glBindRenderbuffer(GL_RENDERBUFFER, depth_rb);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size.x, size.y);
+		glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+		//if objects framebuffer doesn't have a name, name it and attach textures:
+		if (objects_fb == 0) {
+			glGenFramebuffers(1, &objects_fb);
+			//set up framebuffer: (don't need to do when resizing)
+			glBindFramebuffer(GL_FRAMEBUFFER, objects_fb);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, position_tex, 0);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, normal_roughness_tex, 0);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, albedo_tex, 0);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
+			GLenum bufs[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+			glDrawBuffers(3, bufs);
+			check_fb();
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+
+		//if lights-drawing framebuffer doesn't have a name, name it and attach textures:
+		if (lights_fb == 0) {
+			glGenFramebuffers(1, &lights_fb);
+			//set up framebuffer: (don't need to do when resizing)
+			glBindFramebuffer(GL_FRAMEBUFFER, lights_fb);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, output_tex, 0);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
+			GLenum bufs[1] = {GL_COLOR_ATTACHMENT0};
+			glDrawBuffers(1, bufs);
+			check_fb();
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+
+	}
+} fb;
+
+
+PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
@@ -548,15 +652,188 @@ void PlayMode::update(float elapsed) {
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	//update camera aspect ratio for drawable:
 	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
+	glm::mat4 world_to_clip = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	glm::vec3 eye = camera->transform->make_world_from_local()[3];
 
-	//set up light type and position for lit_color_texture_program:
-	// TODO: consider using the Light(s) in the scene to do this
-	glUseProgram(lit_color_texture_program->program);
-	glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
-	glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
-	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
-	glUseProgram(0);
+	// //set up light type and position for lit_color_texture_program:
+	// // TODO: consider using the Light(s) in the scene to do this
+	// glUseProgram(lit_color_texture_program->program);
+	// glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
+	// glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
+	// glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
+	// glUseProgram(0);
 
+	//--- draw geometry to framebuffer ---
+	fb.resize(drawable_size);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fb.objects_fb); // bind the objects (G-buffer) framebuffer as render target
+
+	GLfloat zeros[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // helper clear color (all channels = 0)
+	glClearBufferfv(GL_COLOR, 0, zeros); // clear color attachment 0 (position texture) to zeros
+	glClearBufferfv(GL_COLOR, 1, zeros); // clear color attachment 1 (normal + roughness) to zeros
+	glClearBufferfv(GL_COLOR, 2, zeros); // clear color attachment 2 (albedo) to zeros
+	glClear(GL_DEPTH_BUFFER_BIT); // clear the shared depth buffer
+
+	glDisable(GL_BLEND); // disable blending for the geometry pass
+	glEnable(GL_DEPTH_TEST); // enable depth testing so only nearest fragments write
+	glDepthFunc(GL_LEQUAL); // depth test: pass if incoming depth <= stored depth
+
+	//draw objects to geometry framebuffers:
+	scene.draw(world_to_clip); // render scene into G-buffers using world->clip matrix
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind framebuffer (return to default framebuffer)
+
+	GL_ERRORS(); // check for GL errors (helper macro)
+
+	//--- draw lights, reading geometry from framebuffer ---
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fb.lights_fb); // bind lights framebuffer (output accumulation texture)
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set clear color for lights pass (transparent black)
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear both color and depth on lights framebuffer
+	glDisable(GL_DEPTH_TEST); // disable standard depth testing for light accumulation
+	glDepthFunc(GL_GREATER); // use reversed-depth test: pass if fragment depth > stored depth (used with front-face culling)
+
+	glCullFace(GL_FRONT); // cull front faces so we render back faces of light volumes
+	glEnable(GL_CULL_FACE); // enable face culling
+
+	glEnable(GL_BLEND); // enable blending to accumulate light contributions
+	glBlendEquation(GL_FUNC_ADD); // blending operation: add src and dst
+	glBlendFunc(GL_ONE, GL_ONE); // additive blending: src*1 + dst*1
+	glDepthMask(GL_FALSE); // disable depth writes while accumulating lighting (keep depth buffer from changing)
+
+	//draw geometry for each light:
+	auto &prog = basic_material_deferred_light_program; // reference to the deferred-light shader wrapper
+	glUseProgram(prog->program); // bind the deferred-light shader program
+
+	glBindVertexArray(light_for_basic_material_deferred_light); // bind VAO containing the light-volume geometry
+
+	glActiveTexture(GL_TEXTURE0); // select texture unit 0
+	glBindTexture(GL_TEXTURE_2D, fb.position_tex); // bind world-space position G-buffer to unit 0
+	glActiveTexture(GL_TEXTURE1); // select texture unit 1
+	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex); // bind normal+roughness G-buffer to unit 1
+	glActiveTexture(GL_TEXTURE2); // select texture unit 2
+	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex); // bind albedo (color) G-buffer to unit 2
+
+	for (auto const &light : scene.lights) { // iterate over all lights in the scene
+		glm::mat4 light_to_world = light.transform->make_world_from_local(); // compute light's model-to-world transform
+
+		Mesh const *mesh = nullptr; // pointer to chosen light-volume mesh for this light
+
+		glUniform3fv(prog->EYE_vec3, 1, glm::value_ptr(eye)); // upload camera/eye position (in light-space)
+		glUniform3fv(prog->LIGHT_LOCATION_vec3, 1, glm::value_ptr(glm::vec3(light_to_world[3]))); // upload light position
+		glUniform3fv(prog->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(-light_to_world[2]))); // upload light direction (negated forward)
+		glUniform3fv(prog->LIGHT_ENERGY_vec3, 1, glm::value_ptr(light.energy)); // upload light energy/color
+		if (light.type == Scene::Light::Point) {
+			glUniform1i(prog->LIGHT_TYPE_int, 0); // tell shader this is a point light
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // cutoff not used for point here (set to 1)
+			mesh = &light_meshes->cube; // use cube mesh as bounding volume for point light
+			//when is energy / dis^2 < 1/256.0f?
+			float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // compute influence radius from energy
+			light_to_world = light_to_world * glm::mat4( // scale the light-volume by R
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		} else if (light.type == Scene::Light::Hemisphere) {
+			glUniform1i(prog->LIGHT_TYPE_int, 1); // hemisphere light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
+			mesh = &light_meshes->everything; // full-screen geometry
+			float R = 1.0f; // radius unused/1
+			light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		} else if (light.type == Scene::Light::Spot) {
+			glUniform1i(prog->LIGHT_TYPE_int, 2); // spot light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, std::cos(0.5f * light.spot_fov)); // upload spot cutoff cosine
+			mesh = &light_meshes->cone; // use cone mesh for spot volume
+			float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // estimate radius from energy
+			//HACK: hard-limit to 5 units:
+			R = 5.0f; // clamp radius to 5 to avoid huge cones
+			float C = std::tan(0.5f * light.spot_fov); // cone radius factor from FOV
+			light_to_world = light_to_world * glm::mat4( // scale cone by C*R (x/y) and R (z)
+				C*R, 0.0f, 0.0f, 0.0f,
+				0.0f, C*R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		} else if (light.type == Scene::Light::Directional) {
+			glUniform1i(prog->LIGHT_TYPE_int, 3); // directional light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
+			mesh = &light_meshes->everything; // full-screen geometry for directional
+			float R = 1.0f; // unused scale
+			light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		}
+		glUniformMatrix4fv(prog->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(world_to_clip * light_to_world)); // upload light-volume transform to clip space
+
+		if (mesh && mesh->count) { // if we have geometry, draw the light volume
+			glDrawArrays(mesh->type, mesh->start, mesh->count); // render light-volume; shader reads G-buffers to accumulate lighting
+		}
+	}
+
+	glActiveTexture(GL_TEXTURE2); // restore texture unit 2
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 2
+	glActiveTexture(GL_TEXTURE1); // restore texture unit 1
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 1
+	glActiveTexture(GL_TEXTURE0); // restore texture unit 0
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 0
+
+	glBindVertexArray(0); // unbind VAO
+
+	glDepthMask(GL_TRUE); // re-enable depth writes
+
+	glDisable(GL_CULL_FACE); // disable face culling
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind any framebuffer (back to default)
+
+	GL_ERRORS(); // debug check for GL errors
+
+	//--- copy lights fb info to screen ---
+	
+	glClearColor(0.2f, 0.2f, 0.2f, 0.0f);  // Set background to dark gray
+	glClear(GL_COLOR_BUFFER_BIT);           // Clear the color buffer with the background color
+
+	GL_ERRORS();
+	glDisable(GL_BLEND);                    // Disable blending as we're doing a straight copy
+	glDisable(GL_DEPTH_TEST);               // Disable depth testing as we're drawing a full-screen quad
+	GL_ERRORS();
+
+	glBindVertexArray(empty_vao);           // Bind the empty VAO for full-screen quad rendering
+	glUseProgram(copy_to_screen_program->program);  // Use the program that copies textures to screen
+
+	glActiveTexture(GL_TEXTURE0);           // Activate the first texture unit
+	glBindTexture(GL_TEXTURE_2D, fb.output_tex);  // Show final lighting result
+
+	// if (show == ShowOutput) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.output_tex);  // Show final lighting result
+	// } else if (show == ShowPosition) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.position_tex);  // Show world-space positions
+	// } else if (show == ShowNormalRoughness) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex);  // Show normals and roughness
+	// } else if (show == ShowAlbedo) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex);  // Show surface colors and textures
+	// }
+
+	GL_ERRORS();
+	glDrawArrays(GL_TRIANGLES, 0, 3);       // Draw full-screen triangle (efficient full-screen quad)
+	GL_ERRORS();
+
+	glActiveTexture(GL_TEXTURE0);           // Reset active texture unit
+	glBindTexture(GL_TEXTURE_2D, 0);        // Unbind texture
+
+	glBindVertexArray(0);                   // Unbind VAO
+	glUseProgram(0);                        // Unbind shader program
+
+	//--- stalking mechanics ---
 	if (focus_mode) {
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // stark white background for high contrast
 	} else if (execution_mode) {
@@ -564,13 +841,24 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	} else {
 		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
 	}
-	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+	// We already have the lit color on the default framebuffer.
+	// Now we only want depth, so disable color writes:
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
+	glDepthMask(GL_TRUE);
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
+	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
+	glClear(GL_DEPTH_BUFFER_BIT); // clears depth only (color is masked off)
+
+	// Draw the scene with your normal pipelines; this will fill depth,
+	// but leave the deferred-lit color untouched:
 	scene.draw(*camera);
+
+	// Re-enable color writes for later overlays:
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
 	enemy_visible = false; // default
 
 	if (enemy && enemy_alive) {
