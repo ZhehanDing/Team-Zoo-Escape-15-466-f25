@@ -40,6 +40,7 @@ Park Bench: https://www.blenderkit.com/get-blenderkit/0e35aec5-21cf-4e03-883e-00
 No Parking Sign Board: https://www.blenderkit.com/get-blenderkit/40bd752c-0163-4482-8298-0fe9e0aec7a4/
 Iron gate: https://www.blenderkit.com/get-blenderkit/cc604c67-711c-4645-bdd6-4d8655dffdc1/
 Brick and Wroute Iron Fence Segment: https://www.blenderkit.com/get-blenderkit/7865ad3b-ae62-403e-80d4-99ea9fa49789/
+MPFB Blender extension for human assets: https://static.makehumancommunity.org/mpfb.html
 
 This game was built with [NEST](NEST.md).
 
