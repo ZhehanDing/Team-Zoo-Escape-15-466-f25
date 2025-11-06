@@ -3,7 +3,7 @@
 #include "gl_compile_program.hpp"
 #include "gl_errors.hpp"
 
-#define BONE_LIMIT 128
+#define BONE_LIMIT 256
 
 Scene::Drawable::Pipeline skinning_program_pipeline;
 
@@ -45,6 +45,7 @@ Load< SkinningProgram > skinning_program(LoadTagEarly, []() -> SkinningProgram c
 	return ret;
 });
 
+// from provided 15466 bone animation program
 SkinningProgram::SkinningProgram() {
 	//Compile vertex and fragment shaders using the convenient 'gl_compile_program' helper function:
 	program = gl_compile_program(

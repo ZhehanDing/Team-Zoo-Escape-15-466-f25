@@ -108,8 +108,11 @@ def matrix_to_bytes(mat : Matrix, dim : tuple[int, int], order : str = 'c'):
 
 	return mat_data
 
+def filter_by_substring(sub : list[str], bones : bpy.types.ArmatureBones | bpy.types.PoseBone):
+	return [bone for bone in bones if sub in bone.name]
+
 from collections import deque
-def topological_sort(bones : bpy.types.ArmatureBones | bpy.types.PoseBone) -> list[bpy.types.Bone] | list[bpy.types.PoseBone]:
+def topological_sort(bones : bpy.types.ArmatureBones | bpy.types.PoseBone | list[bpy.types.Bone] | list[bpy.types.PoseBone]) -> list[bpy.types.Bone] | list[bpy.types.PoseBone]:
 	bone_count = len(bones)
 	roots = deque([bone for bone in bones if bone.parent is None])
 	visited = {bone.name : False for bone in bones}
@@ -131,10 +134,16 @@ def topological_sort(bones : bpy.types.ArmatureBones | bpy.types.PoseBone) -> li
 					frontier.append(child)
 			sorted_bones.append(bone)
 
-	if len(sorted_bones) != bone_count:
-		raise ValueError("Topological sort failed: not all input bones are reachable from the subset.")
-	
+	for bone in bones:
+		if not visited[bone.name]:
+			visited[bone.name] = True
+			sorted_bones.append(bone)
+
+	assert(len(sorted_bones) == bone_count)	
 	return sorted_bones
+
+bones = topological_sort(filter_by_substring("DEF", bpy.data.armatures[0].bones))
+bone_indices = {bones[i].name : i for i in range(len(bones))}
 
 #skeleton to write:
 def write_skeleton(obj : bpy.types.Object, outfile):
@@ -166,9 +175,9 @@ def write_skeleton(obj : bpy.types.Object, outfile):
 	armature.pose_position = 'REST'
 
 	# prepare dictionary of bone to index in bones list
-	bones = topological_sort(armature.bones)
+	bones = topological_sort(filter_by_substring("DEF", armature.bones))
+
 	bone_count = len(bones)
-	bone_indices = {bones[i].name : i for i in range(len(bones))}
 	bone_index = 0
 
 	#record mesh name, start position and bone count in the index:
@@ -187,8 +196,7 @@ def write_skeleton(obj : bpy.types.Object, outfile):
 	#write the bones:
 	for i in range(bone_count):
 		bone = bones[i]
-
-		parent = bone_indices[bone.parent.name] if bone.parent else -1 # self if no parent
+		parent = bone_indices[bone.parent.name] if bone.parent and bone.parent.name in bone_indices.keys() else -1 # self if no parent
 		assert(parent <= i)
 
 		index1 += struct.pack('I', len(strings))
@@ -274,7 +282,7 @@ def write_animations(obj : bpy.types.Object, outfile):
 	bpy.ops.object.mode_set(mode='POSE')
 	armature.pose_position = 'POSE'
 
-	pose_bones = topological_sort(obj.pose.bones)
+	pose_bones = topological_sort(filter_by_substring("DEF", obj.pose.bones))
 	actor_count = len(pose_bones)
 	
 	keyframe_total = 0
@@ -290,10 +298,12 @@ def write_animations(obj : bpy.types.Object, outfile):
 
 		# assign the action to the armature
 		obj.animation_data.action = action
-		obj.animation_data.action_slot = action.slots.active
+
+		# seems to only work if action uses non-legacy slot
+		# obj.animation_data.action_slot = action.slots.active 
+		
 		bpy.context.scene.frame_set(int(action.frame_range[0]))
 		bpy.context.view_layer.update()
-
 		
 		keyframe_index = 0
 
@@ -318,7 +328,21 @@ def write_animations(obj : bpy.types.Object, outfile):
 			bpy.context.scene.frame_set(int(i))
 			bpy.context.view_layer.update()
 			for j in range(actor_count):
-				t, r, s = (pose_bones[j].matrix_basis).decompose()
+				assert(bone_indices[pose_bones[j].name] == j)
+				# compute constrained basis per https://blender.stackexchange.com/questions/44637/how-can-i-manually-calculate-bpy-types-posebone-matrix-using-blenders-python-ap
+				basis = None
+				if pose_bones[j].parent and pose_bones[j].parent.name in bone_indices.keys():
+					parent_pose = pose_bones[j].parent.matrix
+					parent_local = pose_bones[j].parent.bone.matrix_local
+					local = pose_bones[j].bone.matrix_local
+					pose = pose_bones[j].matrix
+					basis = local.inverted() @ parent_local @ parent_pose.inverted() @ pose
+				else:
+					local = pose_bones[j].bone.matrix_local
+					pose = pose_bones[j].matrix
+					basis = local.inverted() @ pose
+
+				t, r, s = basis.decompose()
 				r.normalize()
 				local_data += struct.pack('fff', *t)
 				local_data += struct.pack('ffff', r.x, r.y, r.z, r.w)

@@ -45,6 +45,10 @@ struct PlayMode : Mode {
 
 	std::unique_ptr< Skeleton > enemy_skeleton;
 	std::unique_ptr< RiggedMesh > enemy_rig;
+	// temp, human composed of multiple meshes
+	std::unique_ptr< RiggedMesh > enemy_clothes;
+	std::unique_ptr< RiggedMesh > enemy_shoes;
+	// end temp
 	AnimationGraph< Skeleton::BoneTransform > enemy_graph =
 		AnimationGraph< Skeleton::BoneTransform >(
 			[](Skeleton::BoneTransform const &a,

@@ -74,13 +74,15 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 	player_base_rotation = player->rotation;
 
 	for (auto &d : scene.drawables) {
-		if (d.transform == enemy &&
+		if (d.transform->name.find("Human") != std::string::npos && // Human.rigify is name of skeleton transform, not meshes of Human
 			d.pipeline.vao == zoo_meshes_for_lit_color_texture_program) {
 			d.pipeline.count = 0; // hide old enemy mesh
 		}
 	}
 
 	Mesh const &human_mesh = human_meshes->lookup("base.001");
+	Mesh const &human_clothes = human_meshes->lookup("male_casualsuit06");
+	Mesh const &human_shoes = human_meshes->lookup("shoes06");
 	Skeleton const &human_skel = human_skeletons->lookup("Human.rigify");
 
 	enemy_skeleton = std::make_unique< Skeleton >(human_skel);
@@ -99,6 +101,11 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 		human_meshes->buffer, human_infls->buffer, human_mesh, *enemy_skeleton, &enemy_graph);
 
 	// populate rigged mesh
+	// --- a human is compose of various parts : minimal # parts for debug
+	enemy_clothes = std::make_unique< RiggedMesh >(
+		human_meshes->buffer, human_infls->buffer, human_clothes, *enemy_skeleton, &enemy_graph);
+	enemy_shoes = std::make_unique< RiggedMesh >(
+		human_meshes->buffer, human_infls->buffer, human_shoes, *enemy_skeleton, &enemy_graph);
 	scene.drawables.emplace_back(enemy);
 	Scene::Drawable &enemy_drawable = scene.drawables.back();
 	enemy_drawable.pipeline = skinning_program_pipeline;
@@ -107,6 +114,25 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 	enemy_drawable.pipeline.type = enemy_rig->mesh.type;
 	enemy_drawable.pipeline.start = enemy_rig->mesh.start;
 	enemy_drawable.pipeline.count = enemy_rig->mesh.count;
+
+	scene.drawables.emplace_back(enemy);
+	Scene::Drawable &draw = scene.drawables.back();
+	draw.pipeline = skinning_program_pipeline;
+	draw.pipeline.vao =
+		enemy_clothes->make_vao_for_program(skinning_program->program);
+	draw.pipeline.type = enemy_clothes->mesh.type;
+	draw.pipeline.start = enemy_clothes->mesh.start;
+	draw.pipeline.count = enemy_clothes->mesh.count;
+
+	scene.drawables.emplace_back(enemy);
+	Scene::Drawable &draw1 = scene.drawables.back();
+	draw1.pipeline = skinning_program_pipeline;
+	draw1.pipeline.vao =
+		enemy_shoes->make_vao_for_program(skinning_program->program);
+	draw1.pipeline.type = enemy_shoes->mesh.type;
+	draw1.pipeline.start = enemy_shoes->mesh.start;
+	draw1.pipeline.count = enemy_shoes->mesh.count;
+	// --- end human minimal drawables
 
 	// get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -407,6 +433,12 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
 	glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, -1.0f)));
 	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
+	glUseProgram(0);
+
+	glUseProgram(skinning_program->program);
+	glUniform1i(skinning_program->LIGHT_TYPE_int, 1);
+	glUniform3fv(skinning_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, -1.0f)));
+	glUniform3fv(skinning_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
 	glUseProgram(0);
 
 	if (focus_mode) {
