@@ -64,7 +64,7 @@ ParticleProgram::ParticleProgram() {
 		"	vec3 ndc = clip.xyz / clip.w;\n"
 		// up to constants - https://stackoverflow.com/questions/42751427/transformations-from-pixels-to-ndc
 		"	gl_Position = clip + vec4(Corner.x * Size / ASPECT, Corner.y * Size, 0.0, 0.0);\n"
-		"	color = vec4(0.0, 0.0, 0.0, 1.0);\n"
+		"	color = vec4(1.0, 1.0, 1.0, 1.0);\n"
 		"	texCoord = Corner + vec2(0.5);\n"
 		"}\n"
 	,

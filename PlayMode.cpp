@@ -36,8 +36,23 @@ Load< Scene > zoo_scene(LoadTagDefault, []() -> Scene const * {
 	});
 });
 
+Load< std::vector< GLuint > > textures(LoadTagDefault, []() -> std::vector< GLuint > const * {
+	std::vector< std::string > filenames = {
+		"../scenes/assets/textures/swirlix.png"
+	};
+	auto ret = new std::vector< GLuint >();
+	ret->reserve(filenames.size());
+
+	for (size_t i = 0; i < filenames.size(); ++i) {
+		ret->emplace_back(Texture::load(data_path(filenames[i])));
+	}
+
+	return ret;
+});
+
 
 PlayMode::PlayMode() : scene(*zoo_scene) {
+
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
@@ -52,6 +67,15 @@ PlayMode::PlayMode() : scene(*zoo_scene) {
 	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
 	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
 	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
+
+	pg = new ParticleGenerator(Sphere::sample);
+	pg->transform.parent = player;
+	pg->set_texture(textures->at(0));
+	pg->set_spawn_rate(.02f);
+	pg->set_spawn_rate(0.f);
+	pg->set_speed(2.f);
+	pg->set_lifetime(1.f);
+	pg->set_size(1.f);
 
 	player_base_rotation = player->rotation;
 
@@ -174,6 +198,9 @@ void PlayMode::update(float elapsed) {
 	}
 	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 
+	pg->continuous_update(elapsed);
+	
+
 	// --- Player movement (WASD, relative to camera) ---
 	{
 		constexpr float PlayerSpeed = 30.0f;
@@ -182,6 +209,10 @@ void PlayMode::update(float elapsed) {
 		if (!left.pressed &&  right.pressed) move.x =  1.0f;
 		if (down.pressed  && !up.pressed)    move.y = -1.0f;
 		if (!down.pressed &&  up.pressed)    move.y =  1.0f;
+
+		if (down.pressed) {
+			pg->burst_at(player->position, 20);
+		}
 
 		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
 
@@ -353,6 +384,14 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	//update camera aspect ratio for drawable:
 	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
 
+	glUseProgram(particle_program->program);
+	glUniformMatrix4fv(particle_program->CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(camera->make_projection() * glm::mat4(camera->transform->make_local_from_world())));
+	glUniform1fv(particle_program->ASPECT, 1, (GLfloat *)&camera->aspect);
+	glUniform1i(particle_program->LIGHT_TYPE_int, 1);
+	glUniform3fv(particle_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
+	glUniform3fv(particle_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));	
+	glUseProgram(0);
+
 	//set up light type and position for lit_color_texture_program:
 	// TODO: consider using the Light(s) in the scene to do this
 	glUseProgram(lit_color_texture_program->program);
@@ -373,6 +412,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
 
 	scene.draw(*camera);
+	pg->draw();
 	enemy_visible = true; // default
 
 	

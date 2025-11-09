@@ -4,6 +4,7 @@
 
 #include "Scene.hpp"
 #include "ParticleProgram.hpp"
+#include "Textures.hpp"
 
 #include <glm/glm.hpp>
 #include <functional>
@@ -36,7 +37,7 @@ struct ParticleInstanceBuffer {
 		set(data.data(), data.size(), usage);
 	}
 
-    void draw();
+    void draw(GLuint tex);
 
 	//make a vertex array object describing how to map this buffer to the attributes in a given program:
 	// (program should have "Position", "Corner", "Size", and "LookAt" attributes.)
@@ -58,12 +59,6 @@ struct ParticleState {
 struct ParticleGenerator {
     Scene::Transform transform;
 
-    size_t MAX_PARTICLES = 100;
-    float LIFETIME = 2.f;
-    float SPAWN_RATE = 1.f; // 1 particle every SPAWN_RATE seconds
-    float SIZE = .5f;
-    float SPEED = 2.f;
-
     enum Type { // have yet to decide data setup for LOCAL computation, likely will have transform on ParticleGenerator as "center"
         LOCAL, GLOBAL
     } type = GLOBAL;
@@ -81,6 +76,8 @@ struct ParticleGenerator {
     void continuous_update(float elapsed);
     void burst_at(glm::vec3 position, size_t particle_count);
 
+    void set_texture(GLuint tex) { texture_id = tex; };
+
 
     // sampler of position where to spawn particle
     ParticleGenerator(std::function< glm::vec3(std::mt19937 &) > sampler)
@@ -89,14 +86,21 @@ struct ParticleGenerator {
         state.resize(MAX_PARTICLES);
     };
 
-    void draw() { particles.draw(); };
+    void draw() { particles.draw(texture_id); };
 
     private:
+        size_t MAX_PARTICLES = 100;
+        float LIFETIME = 2.f;
+        float SPAWN_RATE = 1.f; // 1 particle every SPAWN_RATE seconds
+        float SIZE = .5f;
+        float SPEED = 2.f;
+
         float spawn_timer = 0.f;
         std::function< glm::vec3(std::mt19937 &) > sampler;
         std::vector< ParticleInstanceBuffer::Vertex > vertices;
         std::vector< ParticleState > state;
 
+        GLuint texture_id = 0;
         ParticleInstanceBuffer particles;
         std::mt19937 rng{};
 };

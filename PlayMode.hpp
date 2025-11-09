@@ -3,6 +3,8 @@
 #include "Scene.hpp"
 #include "Sound.hpp"
 #include "Camera.hpp"
+#include "Particles.hpp"
+#include "Sampler.hpp"
 
 #include <glm/glm.hpp>
 
@@ -19,6 +21,8 @@ struct PlayMode : Mode {
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
 	//----- game state -----
+
+	ParticleGenerator *pg;
 
 	//input tracking:
 	struct Button {

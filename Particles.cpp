@@ -109,7 +109,7 @@ void ParticleInstanceBuffer::set(Vertex const *data, size_t count_, GLenum usage
 	GL_ERRORS();
 }
 
-void ParticleInstanceBuffer::draw() {
+void ParticleInstanceBuffer::draw(GLuint tex) {
     if (vao == 0) {
         make_vao_for_program(particle_program->program);
     }
@@ -119,10 +119,15 @@ void ParticleInstanceBuffer::draw() {
     glBindVertexArray(vao);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, particle_program_pipeline.textures[0].texture);
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
 
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, count);
 
+    glDepthMask(GL_TRUE);
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(0);
     glUseProgram(0);
