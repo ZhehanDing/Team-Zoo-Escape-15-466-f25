@@ -4,5 +4,5 @@
 #include <string>
 
 namespace Texture {
-    GLuint load(std::string const &filename);
+    GLuint load_from_png(std::string const &filename);
 };

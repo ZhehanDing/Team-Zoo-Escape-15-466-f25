@@ -6,7 +6,7 @@
 #include <glm/glm.hpp>
 #include <iostream>
 
-GLuint Texture::load(std::string const &filename) {
+GLuint Texture::load_from_png(std::string const &filename) {
     GLuint tex = 0;
     glGenTextures(1, &tex);
 
@@ -21,7 +21,7 @@ GLuint Texture::load(std::string const &filename) {
     
     load_png(filename, &size, &pixels, OriginLocation::LowerLeftOrigin);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)size.x, (GLsizei)size.y,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, (GLsizei)size.x, (GLsizei)size.y,
         0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
