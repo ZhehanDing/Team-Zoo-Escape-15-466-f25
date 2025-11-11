@@ -3,13 +3,13 @@
 
 void ParticleGenerator::continuous_update(float elapsed) {
     spawn_timer += elapsed;
-    int can_spawn = (int)(spawn_timer / spawn_rate);
-    
+    int can_spawn = spawn_rate > 0 ? (int)(spawn_timer / spawn_rate) : 0;
+
     for (size_t i = 0; i < MAX_PARTICLES; ++i) {
         auto &p = vertices[i];
         auto &s = state[i];
 
-        if (s.time <= 0.f && can_spawn) {
+        if (s.time <= 0.f && can_spawn > 0) {
             --can_spawn;
             if (lifetime.x == lifetime.y)
                 s.time = lifetime.x;
