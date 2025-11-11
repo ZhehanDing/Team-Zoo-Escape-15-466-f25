@@ -3,7 +3,7 @@
 
 void ParticleGenerator::continuous_update(float elapsed) {
     spawn_timer += elapsed;
-    int can_spawn = (int)(spawn_timer / SPAWN_RATE);
+    int can_spawn = (int)(spawn_timer / spawn_rate);
     
     for (size_t i = 0; i < MAX_PARTICLES; ++i) {
         auto &p = vertices[i];
@@ -11,12 +11,34 @@ void ParticleGenerator::continuous_update(float elapsed) {
 
         if (s.time <= 0.f && can_spawn) {
             --can_spawn;
-            s.time = LIFETIME;
-            p.Size = SIZE;
+            if (lifetime.x == lifetime.y)
+                s.time = lifetime.x;
+            else {
+                std::uniform_real_distribution<float> dist(lifetime.x, lifetime.y);
+                s.time = dist(rng);
+            }
+            if (size.x == size.y)
+                p.Size = size.x;
+            else {
+                std::uniform_real_distribution<float> dist(size.x, size.y);
+                p.Size = dist(rng);
+            }
+
+            if (angle.x == angle.y)
+                p.Angle = angle.x;
+            else {
+                std::uniform_real_distribution<float> dist(angle.x, angle.y);
+                p.Angle = dist(rng);
+            }
             
             glm::vec3 sampled = sampler(rng);
             p.Position = transform.make_world_from_local()[3]; // * glm::vec4(sampled, 1.f);
-            s.velocity = SPEED * glm::normalize(sampled);
+            if (speed.x == speed.y)
+                s.velocity = speed.x * glm::normalize(sampler(rng));
+            else {
+                std::uniform_real_distribution<float> dist(speed.x, speed.y);
+                s.velocity = dist(rng) * glm::normalize(sampler(rng));
+            }
             spawn_timer = 0.f;
         }
         else if (s.time > 0.f) {
@@ -45,11 +67,35 @@ void ParticleGenerator::burst_at(glm::vec3 position, size_t particle_count) {
         if (particle_count <= 0) break;
 
         if (s.time <= 0.f) {
-            s.time = LIFETIME;
-            p.Size = SIZE;
+            if (lifetime.x == lifetime.y)
+                s.time = lifetime.x;
+            else {
+                std::uniform_real_distribution<float> dist(lifetime.x, lifetime.y);
+                s.time = dist(rng);
+            }
+
+            if (size.x == size.y)
+                p.Size = size.x;
+            else {
+                std::uniform_real_distribution<float> dist(size.x, size.y);
+                p.Size = dist(rng);
+            }
+
+            if (angle.x == angle.y)
+                p.Angle = angle.x;
+            else {
+                std::uniform_real_distribution<float> dist(angle.x, angle.y);
+                p.Angle = dist(rng);
+            }
 
             p.Position = position;
-            s.velocity = SPEED * glm::normalize(sampler(rng));
+
+            if (speed.x == speed.y)
+                s.velocity = speed.x * glm::normalize(sampler(rng));
+            else {
+                std::uniform_real_distribution<float> dist(speed.x, speed.y);
+                s.velocity = dist(rng) * glm::normalize(sampler(rng));
+            }
             
             --particle_count;
         }
@@ -157,6 +203,17 @@ void ParticleInstanceBuffer::make_vao_for_program(GLuint program) {
 		GLint location = glGetAttribLocation(program, "Size");
 		if (location != -1) {
 			glVertexAttribPointer(location, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLbyte *)0 + offsetof(Vertex, Size));
+			glEnableVertexAttribArray(location);
+            glVertexAttribDivisor(location, 1);
+			bound.insert(location);
+		}
+        assert(location > -1);
+	}
+
+    { //Bind "Angle" if it exists:
+		GLint location = glGetAttribLocation(program, "Angle");
+		if (location != -1) {
+			glVertexAttribPointer(location, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLbyte *)0 + offsetof(Vertex, Angle));
 			glEnableVertexAttribArray(location);
             glVertexAttribDivisor(location, 1);
 			bound.insert(location);

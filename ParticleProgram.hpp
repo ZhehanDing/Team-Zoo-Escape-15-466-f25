@@ -14,6 +14,7 @@ struct ParticleProgram {
 	//Attribute (per-vertex variable) locations:
 	GLuint Position_vec4 = -1U;
 	GLuint Size_float = -1U;
+	GLuint Angle_float = -1U;
 	GLuint Corner_vec2 = -1U;
 
 	//Uniform (per-invocation variable) locations:

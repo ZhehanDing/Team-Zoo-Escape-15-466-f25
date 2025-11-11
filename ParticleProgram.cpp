@@ -55,6 +55,7 @@ ParticleProgram::ParticleProgram() {
 		"uniform float ASPECT;\n"
 		"in vec3 Position;\n"
 		"in float Size;\n"
+		"in float Angle;\n"
 		"in vec2 Corner;\n"
 		"out vec3 position;\n"
 		"out vec4 color;\n"
@@ -63,7 +64,11 @@ ParticleProgram::ParticleProgram() {
 		"	vec4 clip = CLIP_FROM_OBJECT * vec4(Position, 1.0);\n"
 		"	vec3 ndc = clip.xyz / clip.w;\n"
 		// up to constants - https://stackoverflow.com/questions/42751427/transformations-from-pixels-to-ndc
-		"	gl_Position = clip + vec4(Corner.x * Size / ASPECT, Corner.y * Size, 0.0, 0.0);\n"
+		"	float cosT = cos(Angle);\n"
+		"	float sinT = sin(Angle);\n"
+		"	float x = (Corner.x * cosT - Corner.y * sinT) * Size / ASPECT;\n"
+		"	float y = (Corner.x * sinT + Corner.y * cosT) * Size;\n"
+		"	gl_Position = clip + vec4(x, y, 0.0, 0.0);\n"
 		"	color = vec4(1.0, 1.0, 1.0, 1.0);\n"
 		"	texCoord = Corner + vec2(0.5);\n"
 		"}\n"
@@ -107,6 +112,7 @@ ParticleProgram::ParticleProgram() {
 	//look up the locations of vertex attributes:
 	Position_vec4 = glGetAttribLocation(program, "Position");
 	Size_float = glGetAttribLocation(program, "Size");
+	Angle_float = glGetAttribLocation(program, "Angle");
 	Corner_vec2 = glGetAttribLocation(program, "Corner");
 
 	//look up the locations of uniforms:

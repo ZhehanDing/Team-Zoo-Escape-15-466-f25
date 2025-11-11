@@ -27,8 +27,9 @@ struct ParticleInstanceBuffer {
 	struct Vertex {
 		glm::vec3 Position;
 		float Size;
+        float Angle;
 	};
-	static_assert(sizeof(Vertex) == 4*3 + 4*1, "Vertex structure is packed.");
+	static_assert(sizeof(Vertex) == 4*3 + 4*1 + 4*1, "Vertex structure is packed.");
 
 	//you can set the contents of the buffer using this function:
 	// (set 'usage' based on how frequently you plan to upload and what you plan to do with the data GL_STREAM_DRAW is probably what you want.)
@@ -63,15 +64,41 @@ struct ParticleGenerator {
         LOCAL, GLOBAL
     } type = GLOBAL;
 
-    void set_lifetime(float time) { LIFETIME = time; };
+    void set_lifetime_range(float min, float max) { 
+        lifetime.x = min; 
+        lifetime.y = max;
+    };
+    void set_lifetime_range(glm::vec2 lifetime_) { 
+        set_lifetime_range(lifetime_.x, lifetime_.y); 
+    };
     void set_max_particles(size_t max) { 
         MAX_PARTICLES = max; 
         vertices.resize(MAX_PARTICLES); 
         state.resize(MAX_PARTICLES);
     };
-    void set_spawn_rate(float rate) { SPAWN_RATE = rate; };
-    void set_size(float size) { SIZE = size; };
-    void set_speed(float speed) { SPEED = speed; };
+    void set_spawn_rate(float rate) { spawn_rate = rate; };
+    void set_size_range(float min, float max) { 
+        size.x = min;
+        size.y = max;
+    };
+    void set_size_range(glm::vec2 size_) {
+        set_size_range(size_.x, size_.y);
+    };
+    void set_speed_range(float min, float max) { 
+        speed.x = min;
+        speed.y = max;
+    };
+    void set_speed_range(glm::vec2 speed_) {
+        set_speed_range(speed_.x, speed_.y);
+    }
+
+    void set_angle_range(float min, float max) { 
+        angle.x = min;
+        angle.y = max;
+    };
+    void set_angle_range(glm::vec2 angle_) {
+        set_angle_range(angle_.x, angle_.y);
+    }
 
     void continuous_update(float elapsed);
     void burst_at(glm::vec3 position, size_t particle_count);
@@ -90,10 +117,11 @@ struct ParticleGenerator {
 
     private:
         size_t MAX_PARTICLES = 100;
-        float LIFETIME = 2.f;
-        float SPAWN_RATE = 1.f; // 1 particle every SPAWN_RATE seconds
-        float SIZE = .5f;
-        float SPEED = 2.f;
+        glm::vec2 lifetime = glm::vec2(2.f);
+        float spawn_rate = 1.f; // 1 particle every SPAWN_RATE seconds
+        glm::vec2 size = glm::vec2(1.f);
+        glm::vec2 speed = glm::vec2(2.f);
+        glm::vec2 angle = glm::vec2(0.f); // radians
 
         float spawn_timer = 0.f;
         std::function< glm::vec3(std::mt19937 &) > sampler;
