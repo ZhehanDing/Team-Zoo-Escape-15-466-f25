@@ -5,6 +5,7 @@
 #include "BasicMaterialDeferredProgram.hpp"
 #include "LightMeshes.hpp"
 #include "CopyToScreenProgram.hpp"
+#include "ParticleProgram.hpp"
 
 #include "Animation.hpp"
 #include "DrawLines.hpp"
@@ -820,6 +821,15 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
 	glm::mat4 world_to_clip = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 	glm::vec3 eye = camera->transform->make_world_from_local()[3];
+
+	// setup matrices for particles
+	glUseProgram(particle_program->program);
+	glUniformMatrix4fv(particle_program->CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(camera->make_projection() * glm::mat4(camera->transform->make_local_from_world())));
+	glUniform1fv(particle_program->ASPECT, 1, (GLfloat *)&camera->aspect);
+	glUniform1i(particle_program->LIGHT_TYPE_int, 1);
+	glUniform3fv(particle_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
+	glUniform3fv(particle_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));	
+	glUseProgram(0);
 
 	// //set up light type and position for lit_color_texture_program:
 	// // TODO: consider using the Light(s) in the scene to do this

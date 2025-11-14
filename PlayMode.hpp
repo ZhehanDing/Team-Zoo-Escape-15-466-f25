@@ -1,6 +1,5 @@
 #include "Mode.hpp"
 
-#include "Camera.hpp"
 #include "Scene.hpp"
 #include "Sound.hpp"
 #include "Camera.hpp"
