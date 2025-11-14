@@ -3,7 +3,7 @@
 #include "gl_compile_program.hpp"
 #include "gl_errors.hpp"
 
-#define BONE_LIMIT 256
+#define BONE_LIMIT 128
 
 Scene::Drawable::Pipeline skinning_program_pipeline;
 

@@ -174,17 +174,17 @@ Load< AnimationBuffer< Skeleton::BoneTransform > > human_animations(LoadTagDefau
 });
 
 
-static const char *civilian_mesh_names[] = {
-	"civilian_base",
-	"bob01",
-	"eyebrow001",
-	"eyelashes01",
-	"high-poly",
-	"male_casualsuit06",
-	"shoes_monk_strap_female",
-	"teeth_base",
-	"tongue01",
-};
+// static const char *civilian_mesh_names[] = {
+// 	"civilian_base",
+// 	"bob01",
+// 	"eyebrow001",
+// 	"eyelashes01",
+// 	"high-poly",
+// 	"male_casualsuit06",
+// 	"shoes_monk_strap_female",
+// 	"teeth_base",
+// 	"tongue01",
+// };
 
 GLuint civilian_for_basic_material_deferred_object = 0;
 Load< MeshBuffer > civilian_meshes(LoadTagDefault, []() -> MeshBuffer const * {
@@ -198,7 +198,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
-		if (transform.name == "Enemy") enemy = &transform;
+		if (transform.name == "Human.rigify") enemy = &transform;
 		if (transform.name == "Final_Deer") final_deer = &transform;
 		if (transform.name == "Final_Deer Leg") {
 			final_deer_leg = &transform;
@@ -227,7 +227,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	// 	}
 	// }
 
-	Mesh const &human_mesh = human_meshes->lookup("base.001");
+	Mesh const &human_mesh = human_meshes->lookup("base");
 	Skeleton const &human_skel = human_skeletons->lookup("Human.rigify");
 
 	enemy_skeleton = std::make_unique< Skeleton >(human_skel);
@@ -251,22 +251,24 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		transform->position = location;
 		transform->rotation = glm::quat(1, 0, 0, 0);
 		transform->scale = glm::vec3(1.1f);
-
-		for (const char *mesh_name : civilian_mesh_names) {
-			Mesh const *mesh = &civilian_meshes->lookup(mesh_name);
-			scene.drawables.emplace_back(transform);
-			Scene::Drawable &dr = scene.drawables.back();
-			dr.pipeline = basic_material_deferred_object_program_pipeline;
-			dr.pipeline.vao = civilian_for_basic_material_deferred_object;
-			dr.pipeline.type = mesh->type;
-			dr.pipeline.start = mesh->start;
-			dr.pipeline.count = mesh->count;
-		}
+		scene.drawables.emplace_back(transform);
+		Scene::Drawable &dr = scene.drawables.back();
 
 		Civilian c;
 		c.transform = transform;
 		c.base_rotation = transform->rotation;
 		c.start_pos = glm::vec2(location.x, location.y);
+		c.skel = std::make_unique< Skeleton >(human_skel);
+		c.graph = AnimationGraph< Skeleton::BoneTransform >(g);
+		c.graph.add_state(human_animations->lookup("Walk"));
+		c.rig = std::make_unique< RiggedMesh >(human_meshes->buffer, human_infls->buffer, human_mesh, *c.skel, &c.graph);
+
+		dr.pipeline = skinning_program_pipeline;
+		dr.pipeline.vao = c.rig->make_vao_for_program(skinning_program->program);
+		dr.pipeline.type = c.rig->mesh.type;
+		dr.pipeline.start = c.rig->mesh.start;
+		dr.pipeline.count = c.rig->mesh.count;
+
 		civilians.emplace_back(std::move(c));
 	};
 
@@ -801,6 +803,11 @@ void PlayMode::update(float elapsed) {
 	}
 	resolve_collisions(civilians);
 	civilian_avoid_obstacles(civilians, {{player, 0.7f}, {enemy, 0.7f}});
+
+	for (auto &civilian : civilians) {
+		civilian.graph.update(elapsed);
+		civilian.rig->update(elapsed);
+	}
 
 	// --- Audio listener follow player ---
 	{
