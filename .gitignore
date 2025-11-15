@@ -12,6 +12,8 @@ dist/game.pdb
 dist/SDL3.dll
 dist/game
 dist/game.exe
+dist/zoo_nolink.pnct
+dist/zoo_nolink.scene
 freetype-test*
 scenes/SDL3.dll
 scenes/show-meshes*

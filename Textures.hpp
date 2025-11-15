@@ -1,8 +1,10 @@
 #pragma once
-
 #include "GL.hpp"
-#include <string>
+#include "Load.hpp"
+#include <vector>
 
-namespace Texture {
-    GLuint load_from_png(std::string const &filename);
+struct Texture {
+    static GLuint load_from_png(std::string const &filename);
 };
+
+extern Load< std::vector< GLuint > > textures;

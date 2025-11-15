@@ -1,11 +1,12 @@
 #include "PlayMode.hpp"
 #include <algorithm>
 #include <cmath>
-// #include "LitColorTextureProgram.hpp"
+
 #include "BasicMaterialDeferredProgram.hpp"
 #include "LightMeshes.hpp"
 #include "CopyToScreenProgram.hpp"
 #include "ParticleProgram.hpp"
+#include "Textures.hpp"
 
 #include "Animation.hpp"
 #include "DrawLines.hpp"
@@ -45,11 +46,13 @@ Load< Sound::Sample > attraction_voice_4(LoadTagDefault, []() -> Sound::Sample c
 	return new Sound::Sample(data_path("Sound4.wav"));
 });
 
+
 Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
 	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
 
-	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name)
+						   {
 		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
@@ -63,20 +66,26 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
 
-		float roughness = 1.0f;
-		if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
-			roughness = (transform->position.y + 10.0f) / 18.0f;
+		// float roughness = 1.0f;
+		// if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
+		// 	roughness = (transform->position.y + 10.0f) / 18.0f;
+		// }
+		// drawable.pipeline.set_uniforms = [roughness](){
+		// 	glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
+		// };
+
+		bool is_brick_fence = (transform->name.rfind("Fence.", 0) == 0);
+		if (is_brick_fence && !textures->empty()) {
+			drawable.pipeline.textures[0].texture = (*textures)[0];
+			drawable.pipeline.textures[0].target  = GL_TEXTURE_2D;
 		}
-		drawable.pipeline.set_uniforms = [roughness](){
-			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
-		};
 	});
 
-	return ret;
-});
+	return ret; });
 
 // Helper: maintain a framebuffer to hold rendered geometry
-struct FB {
+struct FB
+{
 	// object data gets stored in these textures:
 	GLuint position_tex = 0;
 	GLuint normal_roughness_tex = 0;
