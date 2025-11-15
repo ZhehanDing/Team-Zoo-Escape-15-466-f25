@@ -3,8 +3,17 @@
 #include "Load.hpp"
 #include <vector>
 
-struct Texture {
+struct Texture
+{
     static GLuint load_from_png(std::string const &filename);
 };
 
-extern Load< std::vector< GLuint > > textures;
+struct NamedTexture
+{
+    std::string prefix;   // transform name prefix, e.g. "Fence"
+    std::string filename; // data_path-relative PNG path
+};
+
+extern const std::vector<NamedTexture> named_textures;
+
+extern Load<std::vector<GLuint>> textures;

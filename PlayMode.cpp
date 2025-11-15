@@ -66,19 +66,38 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
 
-		// float roughness = 1.0f;
+		float roughness = 1.0f;
 		// if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
 		// 	roughness = (transform->position.y + 10.0f) / 18.0f;
 		// }
-		// drawable.pipeline.set_uniforms = [roughness](){
-		// 	glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
-		// };
 
-		bool is_brick_fence = (transform->name.rfind("Fence.", 0) == 0);
-		if (is_brick_fence && !textures->empty()) {
-			drawable.pipeline.textures[0].texture = (*textures)[0];
-			drawable.pipeline.textures[0].target  = GL_TEXTURE_2D;
+		for (size_t i = 0; i < named_textures.size(); ++i)
+		{
+			if (transform->name.rfind(named_textures[i].prefix, 0) == 0)
+			{
+				if (i < textures->size())
+				{
+					drawable.pipeline.textures[0].texture = (*textures)[i];
+					drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+				}
+				break;
+			}
 		}
+
+		// if (transform->name.rfind("Fence Brick", 0) == 0 && !textures->empty()) {
+		// 	drawable.pipeline.textures[0].texture = (*textures)[0];
+		// 	drawable.pipeline.textures[0].target  = GL_TEXTURE_2D;
+		// }
+
+		// if (transform->name.rfind("Street Lamp", 0) == 0 && !textures->size() >= 1) {
+		// 	drawable.pipeline.textures[0].texture = (*textures)[1];
+		// 	drawable.pipeline.textures[0].target  = GL_TEXTURE_2D;
+		// }
+
+		drawable.pipeline.set_uniforms = [roughness]()
+		{
+			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
+		};
 	});
 
 	return ret; });
@@ -223,7 +242,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		}
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
-	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
+	// if (enemy == nullptr) throw std::runtime_error("enemy not found.");
 	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
 	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");

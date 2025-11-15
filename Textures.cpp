@@ -35,15 +35,18 @@ GLuint Texture::load_from_png(std::string const &filename)
     return tex;
 }
 
+const std::vector<NamedTexture> named_textures = {
+    {"Fence Brick", "textures/BrickWall001a_Color.png"},
+    {"Street Lamp", "textures/old lamp post_BaseColor.png"},
+};
+
 Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> const *
                                    {
-    auto ret = new std::vector< GLuint >();
+    auto ret = new std::vector<GLuint>();
+    ret->reserve(named_textures.size());
 
-    // index 0: Fence brick wall texture
-    ret->emplace_back(
-        Texture::load_from_png(
-            data_path("textures/BrickWall001a_Color.png")
-        )
-    );
+    for (auto const &nt : named_textures) {
+        ret->emplace_back(Texture::load_from_png(data_path(nt.filename)));
+    }
 
     return ret; });
