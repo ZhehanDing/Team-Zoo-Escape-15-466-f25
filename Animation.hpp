@@ -71,7 +71,6 @@ struct AnimationGraph {
     State *current_state = nullptr;
     uint32_t keyframe_index = 0;
 
-    // ranges fro 0-1
     float playback = 0;
 
     // requires a user-defined interpolation function as input

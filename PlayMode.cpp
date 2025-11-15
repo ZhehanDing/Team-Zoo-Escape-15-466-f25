@@ -12,7 +12,7 @@
 #include "Mesh.hpp"
 #include "RiggedMesh.hpp"
 #include "Skeleton.hpp"
-#include "SkinningProgram.hpp"
+#include "SkinningLitColorTextureProgram.hpp"
 #include "gl_errors.hpp"
 #include "load_save_png.hpp"
 #include "data_path.hpp"
@@ -263,8 +263,8 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		c.graph.add_state(human_animations->lookup("Walk"));
 		c.rig = std::make_unique< RiggedMesh >(human_meshes->buffer, human_infls->buffer, human_mesh, *c.skel, &c.graph);
 
-		dr.pipeline = skinning_program_pipeline;
-		dr.pipeline.vao = c.rig->make_vao_for_program(skinning_program->program);
+		dr.pipeline = skinning_lit_color_texture_program_pipeline;
+		dr.pipeline.vao = c.rig->make_vao_for_program(skinning_lit_color_texture_program->program);
 		dr.pipeline.type = c.rig->mesh.type;
 		dr.pipeline.start = c.rig->mesh.start;
 		dr.pipeline.count = c.rig->mesh.count;
@@ -296,12 +296,19 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		make_civilian(center + glm::vec3(x, y, 0.3f));
 	}
 
+	// std::move does not update the following pointers---they still point to
+	// the emptied location, reassign them
+	for (auto &civilian : civilians) {
+		civilian.rig->anim_graph = &civilian.graph;
+		civilian.rig->anim_graph->current_state = &civilian.graph.states.find("Walk")->second;
+	}
+
 	// populate rigged mesh
 	scene.drawables.emplace_back(enemy);
 	Scene::Drawable &enemy_drawable = scene.drawables.back();
-	enemy_drawable.pipeline = skinning_program_pipeline;
+	enemy_drawable.pipeline = skinning_lit_color_texture_program_pipeline;
 	enemy_drawable.pipeline.vao =
-		enemy_rig->make_vao_for_program(skinning_program->program);
+		enemy_rig->make_vao_for_program(skinning_lit_color_texture_program->program);
 	enemy_drawable.pipeline.type = enemy_rig->mesh.type;
 	enemy_drawable.pipeline.start = enemy_rig->mesh.start;
 	enemy_drawable.pipeline.count = enemy_rig->mesh.count;

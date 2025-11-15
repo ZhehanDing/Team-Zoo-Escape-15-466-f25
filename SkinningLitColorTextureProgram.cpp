@@ -1,21 +1,21 @@
-#include "SkinningProgram.hpp"
+#include "SkinningLitColorTextureProgram.hpp"
 
 #include "gl_compile_program.hpp"
 #include "gl_errors.hpp"
 
-#define BONE_LIMIT 128
+#define BONE_LIMIT 256
 
-Scene::Drawable::Pipeline skinning_program_pipeline;
+Scene::Drawable::Pipeline skinning_lit_color_texture_program_pipeline;
 
-Load< SkinningProgram > skinning_program(LoadTagEarly, []() -> SkinningProgram const * {
-	SkinningProgram *ret = new SkinningProgram();
+Load< SkinningLitColorTextureProgram > skinning_lit_color_texture_program(LoadTagEarly, []() -> SkinningLitColorTextureProgram const * {
+	SkinningLitColorTextureProgram *ret = new SkinningLitColorTextureProgram();
 
 	//----- build the pipeline template -----
-	skinning_program_pipeline.program = ret->program;
+	skinning_lit_color_texture_program_pipeline.program = ret->program;
 
-	skinning_program_pipeline.CLIP_FROM_OBJECT_mat4 = ret->CLIP_FROM_OBJECT_mat4;
-	skinning_program_pipeline.LIGHT_FROM_OBJECT_mat4x3 = ret->LIGHT_FROM_OBJECT_mat4x3;
-	skinning_program_pipeline.LIGHT_FROM_NORMAL_mat3 = ret->LIGHT_FROM_NORMAL_mat3;
+	skinning_lit_color_texture_program_pipeline.CLIP_FROM_OBJECT_mat4 = ret->CLIP_FROM_OBJECT_mat4;
+	skinning_lit_color_texture_program_pipeline.LIGHT_FROM_OBJECT_mat4x3 = ret->LIGHT_FROM_OBJECT_mat4x3;
+	skinning_lit_color_texture_program_pipeline.LIGHT_FROM_NORMAL_mat3 = ret->LIGHT_FROM_NORMAL_mat3;
 
 	/*
 	// This will be used later if/when we build a light loop into the Scene:
@@ -39,14 +39,14 @@ Load< SkinningProgram > skinning_program(LoadTagEarly, []() -> SkinningProgram c
 	glBindTexture(GL_TEXTURE_2D, 0);
 
 
-	skinning_program_pipeline.textures[0].texture = tex;
-	skinning_program_pipeline.textures[0].target = GL_TEXTURE_2D;
+	skinning_lit_color_texture_program_pipeline.textures[0].texture = tex;
+	skinning_lit_color_texture_program_pipeline.textures[0].target = GL_TEXTURE_2D;
 
 	return ret;
 });
 
 // from provided 15466 bone animation program
-SkinningProgram::SkinningProgram() {
+SkinningLitColorTextureProgram::SkinningLitColorTextureProgram() {
 	//Compile vertex and fragment shaders using the convenient 'gl_compile_program' helper function:
 	program = gl_compile_program(
 		//vertex shader:
@@ -175,7 +175,7 @@ SkinningProgram::SkinningProgram() {
 	glUseProgram(0); //unbind program -- glUniform* calls refer to ??? now
 }
 
-SkinningProgram::~SkinningProgram() {
+SkinningLitColorTextureProgram::~SkinningLitColorTextureProgram() {
 	glDeleteProgram(program);
 	program = 0;
 }

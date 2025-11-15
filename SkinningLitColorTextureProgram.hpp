@@ -5,9 +5,9 @@
 #include "Scene.hpp"
 
 //Shader program that draws transformed, lit, textured vertices tinted with vertex colors:
-struct SkinningProgram {
-	SkinningProgram();
-	~SkinningProgram();
+struct SkinningLitColorTextureProgram {
+	SkinningLitColorTextureProgram();
+	~SkinningLitColorTextureProgram();
 
 	GLuint program = 0;
 
@@ -41,8 +41,8 @@ struct SkinningProgram {
 	//TEXTURE0 - texture that is accessed by TexCoord
 };
 
-extern Load< SkinningProgram > skinning_program;
+extern Load< SkinningLitColorTextureProgram > skinning_lit_color_texture_program;
 
 //For convenient scene-graph setup, copy this object:
 // NOTE: by default, has texture bound to 1-pixel white texture -- so it's okay to use with vertex-color-only meshes.
-extern Scene::Drawable::Pipeline skinning_program_pipeline;
+extern Scene::Drawable::Pipeline skinning_lit_color_texture_program_pipeline;
