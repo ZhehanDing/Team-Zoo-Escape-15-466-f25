@@ -31,7 +31,7 @@ void ParticleGenerator::continuous_update(float elapsed) {
                 p.Angle = dist(rng);
             }
             
-            glm::vec3 sampled = sampler(rng);
+            // glm::vec3 sampled = sampler(rng);
             p.Position = transform.make_world_from_local()[3]; // * glm::vec4(sampled, 1.f);
             if (speed.x == speed.y)
                 s.velocity = speed.x * glm::normalize(sampler(rng));

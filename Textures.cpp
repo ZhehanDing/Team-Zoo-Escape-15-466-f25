@@ -1,5 +1,3 @@
-#pragma once
-
 #include "Textures.hpp"
 
 #include "load_save_png.hpp"
