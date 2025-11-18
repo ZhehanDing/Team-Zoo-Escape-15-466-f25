@@ -37,7 +37,17 @@ GLuint Texture::load_from_png(std::string const &filename)
 
 const std::vector<NamedTexture> named_textures = {
     {"Fence Brick", "textures/BrickWall001a_Color.png"},
-    {"Street Lamp", "textures/old lamp post_BaseColor.png"},
+    {"Street lamp", "textures/old lamp post_BaseColor.png"},
+    {"Cobblestone road", "textures/road_C_fix.png"},
+    {"Park Bench", "textures/Park Bench_BaseColor.1001.png"},
+    {"Low Poly Evergreen Tree", "textures/evergreen.png"},
+    {"Fence_array", "textures/steel.png"},
+    {"Steel", "textures/steel.png"},
+    {"Tyriese_Miller_C_Deer_Idle:body", "textures/deer_skin_plain.png"},
+    {"Tyriese_Miller_C_Deer_Idle:antler", "textures/bone.png"},
+    {"Deer Behind Fence", "textures/deer_skin_plain.png"},
+    // {"Ground", "textures/grass.png"},
+    {"177d920ddde57c74f8e1ef18863ab511", "textures/sign.png"},
 };
 
 Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> const *

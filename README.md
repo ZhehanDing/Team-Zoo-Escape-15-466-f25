@@ -41,6 +41,11 @@ No Parking Sign Board: https://www.blenderkit.com/get-blenderkit/40bd752c-0163-4
 Iron gate: https://www.blenderkit.com/get-blenderkit/cc604c67-711c-4645-bdd6-4d8655dffdc1/
 Brick and Wroute Iron Fence Segment: https://www.blenderkit.com/get-blenderkit/7865ad3b-ae62-403e-80d4-99ea9fa49789/
 MPFB Blender extension for human assets: https://static.makehumancommunity.org/mpfb.html
+Mossy Rock: https://www.blenderkit.com/get-blenderkit/cd2d8180-31ef-4f9c-a42c-4bdd9155b632/
+Mossy Rock 2: https://www.blenderkit.com/get-blenderkit/b2f6f8b2-72d3-4444-9bcf-da74d10e0417/
+1993 Volvo 240 Old Rusty Car: https://www.blenderkit.com/get-blenderkit/73a0193a-f169-4d89-8f50-7f6a008f3009/
+Off-Road 4x4 vehicle mud: https://www.blenderkit.com/get-blenderkit/5e4301db-f419-40d5-830b-cb3f23cd8d1d/
+Forest Cabin: https://www.blenderkit.com/get-blenderkit/a1b23c3e-5e04-4ee5-8dc5-ce4016d0e90a/
 
 This game was built with [NEST](NEST.md).
 

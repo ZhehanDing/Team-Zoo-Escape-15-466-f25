@@ -71,12 +71,15 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		// 	roughness = (transform->position.y + 10.0f) / 18.0f;
 		// }
 
+		printf("-- Transform name: %s\n", transform->name.c_str());
 		for (size_t i = 0; i < named_textures.size(); ++i)
 		{
+			// printf("Checking prefix: %s\n", named_textures[i].prefix.c_str());
 			if (transform->name.rfind(named_textures[i].prefix, 0) == 0)
 			{
 				if (i < textures->size())
 				{
+					printf("Assigning texture %s to object %s\n", named_textures[i].filename.c_str(), transform->name.c_str());
 					drawable.pipeline.textures[0].texture = (*textures)[i];
 					drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
 				}
@@ -244,7 +247,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	// if (enemy == nullptr) throw std::runtime_error("enemy not found.");
 	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
-	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
+	// if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
 	if (gate == nullptr) throw std::runtime_error("gate not found.");
 
