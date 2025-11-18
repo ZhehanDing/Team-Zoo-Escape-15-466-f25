@@ -51,7 +51,8 @@ else:
 
 
 #meshes to write:
-to_write = set()
+file_meshes = dict() #filename -> set of mesh names from that file to write
+file_meshes[infile] = set()
 did_collections = set()
 def add_meshes(from_collection):
 	global to_write
@@ -69,8 +70,13 @@ def add_meshes(from_collection):
 			if obj.data.name[0] == '_':
 				print("Skipping mesh '" + obj.data.name + "' because its name starts with an underscore.")
 			else:
-				to_write.add(obj.data)
-				# print("Added mesh '" + obj.data.name + "' from object '" + obj.name + "'.")
+				library_file = infile
+				if not obj.data.library is None:
+					library_file = bpy.path.abspath(obj.data.library.filepath)
+				if not library_file in file_meshes:
+					file_meshes[library_file] = set()
+				file_meshes[library_file].add(obj.data.name) #not sure mesh identity persists across scene reload
+					
 		if obj.instance_collection:
 			add_meshes(obj.instance_collection)
 	for child in from_collection.children:
@@ -79,15 +85,7 @@ def add_meshes(from_collection):
 add_meshes(collection)
 #print("Added meshes from: ", did_collections)
 
-#set all collections visible: (so that meshes can be selected for triangulation)
-def set_visible(layer_collection):
-	layer_collection.exclude = False
-	layer_collection.hide_viewport = False
-	layer_collection.collection.hide_viewport = False
-	for child in layer_collection.children:
-		set_visible(child)
 
-set_visible(bpy.context.view_layer.layer_collection)
 
 #data contains vertex, normal, color, and texture data from the meshes:
 data = []
@@ -98,101 +96,137 @@ strings = b''
 #index gives offsets into the data (and names) for each mesh:
 index = b''
 
+#vertex_count keeps track of total vertices written:
 vertex_count = 0
-for obj in bpy.data.objects:
-	if obj.data in to_write:
-		to_write.remove(obj.data)
-	else:
-		continue
 
-	obj.hide_select = False
-	mesh = obj.data
-	name = mesh.name
+#errors keeps track of any (non-fatal) errors:
+errors = []
 
-	print("Writing '" + name + "'...")
+def do_file(filepath, to_write):
+	global data, strings, index, vertex_count
 
-	if bpy.context.object:
-		bpy.ops.object.mode_set(mode='OBJECT') #get out of edit mode (just in case)
+	if filepath != infile:
+		print(f"------ loading {filepath} ------")
+		bpy.ops.wm.open_mainfile(filepath=filepath)
 
-	#select the object and make it the active object:
-	bpy.ops.object.select_all(action='DESELECT')
-	obj.select_set(True)
-	bpy.context.view_layer.objects.active = obj
-	bpy.ops.object.mode_set(mode='OBJECT')
 
-	#print(obj.visible_get()) #DEBUG
+	#set all collections visible: (so that meshes can be selected for triangulation)
+	def set_visible(layer_collection):
+		layer_collection.exclude = False
+		layer_collection.hide_viewport = False
+		layer_collection.collection.hide_viewport = False
+		for child in layer_collection.children:
+			set_visible(child)
 
-	#apply all modifiers (?):
-	bpy.ops.object.convert(target='MESH')
+	set_visible(bpy.context.view_layer.layer_collection)
 
-	#subdivide object's mesh into triangles:
-	bpy.ops.object.mode_set(mode='EDIT')
-	bpy.ops.mesh.select_all(action='SELECT')
-	bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
-	bpy.ops.object.mode_set(mode='OBJECT')
+	for obj in bpy.data.objects:
+		if obj.data is None: continue
+		if not obj.data.name in to_write: continue
 
-	#record mesh name, start position and vertex count in the index:
-	name_begin = len(strings)
-	strings += bytes(name, "utf8")
-	name_end = len(strings)
-	index += struct.pack('I', name_begin)
-	index += struct.pack('I', name_end)
+		to_write.remove(obj.data.name)
 
-	index += struct.pack('I', vertex_count) #vertex_begin
-	#...count will be written below
+		obj.hide_select = False
+		mesh = obj.data
+		name = mesh.name
 
-	colors = None
-	if len(obj.data.color_attributes) == 0:
-		print("WARNING: trying to export color data, but object '" + name + "' does not have color data; will output 0xffffffff")
-	else:
-		colors = obj.data.color_attributes.active_color;
-		if len(obj.data.color_attributes) != 1:
-			print("WARNING: object '" + name + "' has multiple vertex color layers; only exporting '" + colors.name + "'")
+		if not mesh.library is None:
+			print("Skipping '" + name + "' because it is linked from '" + bpy.path.abspath(mesh.library.filepath) + "'.")
+			continue
 
-	uvs = None
-	if len(obj.data.uv_layers) == 0:
-		print("WARNING: trying to export texcoord data, but object '" + name + "' does not uv data; will output (0.0, 0.0)")
-	else:
-		uvs = obj.data.uv_layers.active.data
-		if len(obj.data.uv_layers) != 1:
-			print("WARNING: object '" + name + "' has multiple texture coordinate layers; only exporting '" + obj.data.uv_layers.active.name + "'")
+		print("Writing '" + name + "'...")
 
-	local_data = b''
+		if bpy.context.object:
+			bpy.ops.object.mode_set(mode='OBJECT') #get out of edit mode (just in case)
 
-	#write the mesh triangles:
-	for poly in mesh.polygons:
-		assert(len(poly.loop_indices) == 3)
-		for i in range(0,3):
-			assert(mesh.loops[poly.loop_indices[i]].vertex_index == poly.vertices[i])
-			loop = mesh.loops[poly.loop_indices[i]]
-			vertex = mesh.vertices[loop.vertex_index]
-			for x in vertex.co:
-				local_data += struct.pack('f', x)
-			for x in loop.normal:
-				local_data += struct.pack('f', x)
+		#select the object and make it the active object:
+		bpy.ops.object.select_all(action='DESELECT')
+		obj.select_set(True)
+		bpy.context.view_layer.objects.active = obj
+		bpy.ops.object.mode_set(mode='OBJECT')
 
-			col = None
-			if colors != None and colors.domain == 'POINT':
-				col = colors.data[poly.vertices[i]].color
-			elif colors != None and colors.domain == 'CORNER':
-				col = colors.data[poly.loop_indices[i]].color
-			else:
-				col = (1.0, 1.0, 1.0, 1.0)
-			local_data += struct.pack('BBBB', int(col[0] * 255), int(col[1] * 255), int(col[2] * 255), 255)
+		#print(obj.visible_get()) #DEBUG
 
-			if uvs != None:
-				uv = uvs[poly.loop_indices[i]].uv
-				local_data += struct.pack('ff', uv.x, uv.y)
-			else:
-				local_data += struct.pack('ff', 0, 0)
-		if len(local_data) > 1000:
-			data.append(local_data)
-			local_data = b''
-	vertex_count += len(mesh.polygons) * 3
+		#apply all modifiers (?):
+		bpy.ops.object.convert(target='MESH')
 
-	data.append(local_data)
+		#subdivide object's mesh into triangles:
+		bpy.ops.object.mode_set(mode='EDIT')
+		bpy.ops.mesh.select_all(action='SELECT')
+		bpy.ops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
+		bpy.ops.object.mode_set(mode='OBJECT')
 
-	index += struct.pack('I', vertex_count) #vertex_end
+		#record mesh name, start position and vertex count in the index:
+		name_begin = len(strings)
+		strings += bytes(name, "utf8")
+		name_end = len(strings)
+		index += struct.pack('I', name_begin)
+		index += struct.pack('I', name_end)
+
+		index += struct.pack('I', vertex_count) #vertex_begin
+		#...count will be written below
+
+		colors = None
+		if len(obj.data.color_attributes) == 0:
+			print("WARNING: trying to export color data, but object '" + name + "' does not have color data; will output 0xffffffff")
+		else:
+			colors = obj.data.color_attributes.active_color;
+			if len(obj.data.color_attributes) != 1:
+				print("WARNING: object '" + name + "' has multiple vertex color layers; only exporting '" + colors.name + "'")
+
+		uvs = None
+		if len(obj.data.uv_layers) == 0:
+			print("WARNING: trying to export texcoord data, but object '" + name + "' does not uv data; will output (0.0, 0.0)")
+		else:
+			uvs = obj.data.uv_layers.active.data
+			if len(obj.data.uv_layers) != 1:
+				print("WARNING: object '" + name + "' has multiple texture coordinate layers; only exporting '" + obj.data.uv_layers.active.name + "'")
+
+		local_data = b''
+
+		#write the mesh triangles:
+		for poly in mesh.polygons:
+			assert(len(poly.loop_indices) == 3)
+			for i in range(0,3):
+				assert(mesh.loops[poly.loop_indices[i]].vertex_index == poly.vertices[i])
+				loop = mesh.loops[poly.loop_indices[i]]
+				vertex = mesh.vertices[loop.vertex_index]
+				for x in vertex.co:
+					local_data += struct.pack('f', x)
+				for x in loop.normal:
+					local_data += struct.pack('f', x)
+
+				col = None
+				if colors != None and colors.domain == 'POINT':
+					col = colors.data[poly.vertices[i]].color
+				elif colors != None and colors.domain == 'CORNER':
+					col = colors.data[poly.loop_indices[i]].color
+				else:
+					col = (1.0, 1.0, 1.0, 1.0)
+				local_data += struct.pack('BBBB', int(col[0] * 255), int(col[1] * 255), int(col[2] * 255), 255)
+
+				if uvs != None:
+					uv = uvs[poly.loop_indices[i]].uv
+					local_data += struct.pack('ff', uv.x, uv.y)
+				else:
+					local_data += struct.pack('ff', 0, 0)
+			if len(local_data) > 1000:
+				data.append(local_data)
+				local_data = b''
+		vertex_count += len(mesh.polygons) * 3
+
+		data.append(local_data)
+
+		index += struct.pack('I', vertex_count) #vertex_end
+	
+	#check that everything got written okay...
+	for name in to_write:
+		errors.append(f"ERROR: failed to write '{name}' from '{filepath}'! (It may not have had an object in this file that referenced it.)")
+
+do_file(infile, file_meshes[infile])
+
+for filepath, to_write in file_meshes.items():
+	do_file(filepath, to_write)
 
 data = b''.join(data)
 
@@ -217,3 +251,7 @@ wrote = blob.tell()
 blob.close()
 
 print("Wrote " + str(wrote) + " bytes [== " + str(len(data)+8) + " bytes of data + " + str(len(strings)+8) + " bytes of strings + " + str(len(index)+8) + " bytes of index] to '" + outfile + "'")
+
+if len(errors):
+	print("Errors:\n" + "\n".join(errors))
+	exit(1)
