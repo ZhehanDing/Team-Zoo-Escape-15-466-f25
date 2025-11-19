@@ -46,6 +46,7 @@ Mossy Rock 2: https://www.blenderkit.com/get-blenderkit/b2f6f8b2-72d3-4444-9bcf-
 1993 Volvo 240 Old Rusty Car: https://www.blenderkit.com/get-blenderkit/73a0193a-f169-4d89-8f50-7f6a008f3009/
 Off-Road 4x4 vehicle mud: https://www.blenderkit.com/get-blenderkit/5e4301db-f419-40d5-830b-cb3f23cd8d1d/
 Forest Cabin: https://www.blenderkit.com/get-blenderkit/a1b23c3e-5e04-4ee5-8dc5-ce4016d0e90a/
+Small House: https://www.blenderkit.com/get-blenderkit/6f015242-11e7-45af-a02d-8a17c7b555e6/
 
 This game was built with [NEST](NEST.md).
 
