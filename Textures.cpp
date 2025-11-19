@@ -43,11 +43,23 @@ const std::vector<NamedTexture> named_textures = {
     {"Low Poly Evergreen Tree", "textures/evergreen.png"},
     {"Fence_array", "textures/steel.png"},
     {"Steel", "textures/steel.png"},
+    {"preset_0", "textures/steel.png"},
     {"Tyriese_Miller_C_Deer_Idle:body", "textures/deer_skin_plain.png"},
     {"Tyriese_Miller_C_Deer_Idle:antler", "textures/bone.png"},
     {"Deer Behind Fence", "textures/deer_skin_plain.png"},
+    {"Dead Deer", "textures/deer_skin_spotted.png"},
     // {"Ground", "textures/grass.png"},
     {"177d920ddde57c74f8e1ef18863ab511", "textures/sign.png"},
+    {"Zoo Sign.001", "textures/zoo_sign_1.png"},
+    {"Zoo Sign.002", "textures/zoo_sign_2.png"},
+    {"Roof", "textures/compitition1_Chimini_BaseColor.png"},
+    {"Door", "textures/compitition1_Chimini_BaseColor.png"},
+    {"Wood", "textures/wood.png"},
+    {"Flower Pot", "textures/compitition1_Pot_BaseColor.png"},
+    {"Stairs.", "textures/compitition1_Stairs_BaseColor.png"},
+    {"Stairs Support", "textures/compitition1_Stairs Support_BaseColor.png"},
+    {"Structure", "textures/compitition1_Structure_BaseColor.png"},
+    {"Terras", "textures/compitition1_Terras_BaseColor.png"},
 };
 
 Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> const *
