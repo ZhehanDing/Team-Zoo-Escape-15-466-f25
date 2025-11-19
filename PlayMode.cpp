@@ -71,7 +71,7 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		// 	roughness = (transform->position.y + 10.0f) / 18.0f;
 		// }
 
-		printf("-- Transform name: %s\n", transform->name.c_str());
+		// printf("-- Transform name: %s\n", transform->name.c_str());
 		for (size_t i = 0; i < named_textures.size(); ++i)
 		{
 			// printf("Checking prefix: %s\n", named_textures[i].prefix.c_str());
@@ -79,7 +79,7 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 			{
 				if (i < textures->size())
 				{
-					printf("Assigning texture %s to object %s\n", named_textures[i].filename.c_str(), transform->name.c_str());
+					// printf("Assigning texture %s to object %s\n", named_textures[i].filename.c_str(), transform->name.c_str());
 					drawable.pipeline.textures[0].texture = (*textures)[i];
 					drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
 				}
@@ -87,23 +87,16 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 			}
 		}
 
-		// if (transform->name.rfind("Fence Brick", 0) == 0 && !textures->empty()) {
-		// 	drawable.pipeline.textures[0].texture = (*textures)[0];
-		// 	drawable.pipeline.textures[0].target  = GL_TEXTURE_2D;
-		// }
-
-		// if (transform->name.rfind("Street Lamp", 0) == 0 && !textures->size() >= 1) {
-		// 	drawable.pipeline.textures[0].texture = (*textures)[1];
-		// 	drawable.pipeline.textures[0].target  = GL_TEXTURE_2D;
-		// }
-
-		drawable.pipeline.set_uniforms = [roughness]()
+		bool is_sky = (transform->name == "Sky");
+		drawable.pipeline.set_uniforms = [roughness, is_sky]()
 		{
 			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
+			glUniform1i(basic_material_deferred_object_program->SKY_MODE_int,
+						is_sky ? 1 : 0);
 		};
-	});
+		});
 
-	return ret; });
+		return ret; });
 
 // Helper: maintain a framebuffer to hold rendered geometry
 struct FB
@@ -238,11 +231,28 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		}
 		if (transform.name == "Sky") sky = &transform;
 		if (transform.name == "Gate") gate = &transform;
-		if (transform.name.rfind("Fence", 0) == 0)
-		{ // prefix match
-			fences.push_back(&transform);
-			// printf("Found fence: %s\n", transform.name.c_str());
-		}
+		if (transform.name == "Collider_Deer Fence") deer_fence_collider = &transform;
+		// if (transform.name == "Forest Cabin") forest_cabin = &transform;
+		// if (transform.name == "Small House Main") small_house = &transform;
+		// if (transform.name.rfind("Fence", 0) == 0)
+		// {
+		// 	fences.push_back(&transform);
+		// 	// printf("Found fence: %s\n", transform.name.c_str());
+		// }
+		// if (transform.name.rfind("Low Poly Evergreen Tree", 0) == 0)
+		// {
+		// 	trees.push_back(&transform);
+		// 	// printf("Found tree: %s\n", transform.name.c_str());
+		// }
+		// if (transform.name.rfind("Wood Cylinder", 0) == 0)
+		// {
+		// 	cylinders.push_back(&transform);
+		// 	// printf("Found tree: %s\n", transform.name.c_str());
+		// }
+		// if (transform.name.rfind("Collider", 0) == 0)
+		// {
+		// 	colliders.push_back(&transform);
+		// }
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	// if (enemy == nullptr) throw std::runtime_error("enemy not found.");
@@ -250,6 +260,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	// if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
 	if (gate == nullptr) throw std::runtime_error("gate not found.");
+	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
 
 	player_base_rotation = player->rotation;
 
@@ -640,46 +651,55 @@ void PlayMode::update(float elapsed) {
 
 	// --- Player movement (WASD, relative to camera) ---
 	{
-		if (dashing) {
+		if (dashing)
+		{
 			player->position += dash_dir * dash_speed * elapsed;
-		} else {
+		}
+		else
+		{
 			constexpr float PlayerSpeed = 30.0f;
 			glm::vec2 move = glm::vec2(0.0f);
-			if (left.pressed && !right.pressed) move.x = -1.0f;
-			if (!left.pressed && right.pressed) move.x = 1.0f;
-			if (down.pressed && !up.pressed) move.y = -1.0f;
-			if (!down.pressed && up.pressed) move.y = 1.0f;
+			if (left.pressed && !right.pressed)
+				move.x = -1.0f;
+			if (!left.pressed && right.pressed)
+				move.x = 1.0f;
+			if (down.pressed && !up.pressed)
+				move.y = -1.0f;
+			if (!down.pressed && up.pressed)
+				move.y = 1.0f;
 
-			if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
+			if (move != glm::vec2(0.0f))
+				move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
 
 			glm::mat4x3 frame = player->make_parent_from_local();
 			glm::vec3 frame_right = -frame[0];
 			glm::vec3 frame_forward = -frame[1];
 
-		// player->position += move.x * frame_right + move.y * frame_forward;
+			// player->position += move.x * frame_right + move.y * frame_forward;
 
-		glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
+			[[maybe_unused]]glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
+			
 
-		// Define approximate hitboxes (adjust to your model scale)
-		glm::vec3 player_half(1.0f, 1.0f, 1.0f);
-		glm::vec3 gate_half(2.0f, 9.0f, 3.0f);
-		glm::vec3 fence_half(2.0f, 6.0f, 3.0f);
-
-		// Check collisions
-		bool hit_gate = check_collision(new_pos, player_half, gate->position, gate_half);
-		bool hit_fence = false;
-		for (auto *f : fences)
-		{
-			if (!f)
-				continue;
-			if (check_collision(new_pos, player_half, f->position, fence_half))
+			if (move != glm::vec2(0.0f))
 			{
-				hit_fence = true;
-				break;
-			}
-		}
+				// Define approximate hitboxes (adjust to your model scale)
+				glm::vec3 player_half(1.0f, 1.0f, 1.0f);
+				glm::vec3 gate_half(2.0f, 9.0f, 3.0f);
+				glm::vec3 deer_fence(35.0f, 35.0f, 3.0f);
 
-		if (!hit_gate && !hit_fence) player->position = new_pos; // Only move if no collision
+				bool hit_gate = check_collision(new_pos, player_half, gate->position, gate_half);
+				bool hit_deer_fence = check_collision(new_pos, player_half, deer_fence_collider->position, deer_fence);
+				if (!hit_gate && !hit_deer_fence)
+				{
+					printf("-- Player pos: (%.2f, %.2f, %.2f)\n", new_pos.x, new_pos.y, new_pos.z);
+					printf("Gate pos: (%.2f, %.2f, %.2f), Deer Fence pos: (%.2f, %.2f, %.2f)\n", gate->position.x, gate->position.y, gate->position.z, deer_fence_collider->position.x, deer_fence_collider->position.y, deer_fence_collider->position.z);
+					player->position = new_pos; // Only move if no collision
+				}
+				else
+				{
+					printf("hit_gate: %d, hit_deer_fence: %d\n", hit_gate, hit_deer_fence);
+				}
+			}
 		}
 	}
 

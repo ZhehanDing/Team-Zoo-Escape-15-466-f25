@@ -28,6 +28,8 @@ struct BasicMaterialDeferredObjectProgram {
 	//  material uniforms:
 	GLuint ROUGHNESS_float = -1U;
 
+	GLint SKY_MODE_int = -1; // 0 = normal object, 1 = sky dome
+
 	//Textures:
 	//TEXTURE0 - texture that is accessed by TexCoord
 
