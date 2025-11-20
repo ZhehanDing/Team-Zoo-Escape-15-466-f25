@@ -691,7 +691,6 @@ void PlayMode::update(float elapsed) {
 
 				if (!hits.any())
 				{
-					// printf("Move to: %.2f, %.2f, %.2f\n", new_pos.x, new_pos.y, new_pos.z);
 					player->position = new_pos;
 				}
 				else

@@ -39,6 +39,7 @@ const std::vector<NamedTexture> named_textures = {
     // General
     {"Steel", "textures/steel.png"},
     {"Brown Metal", "textures/brown_metal.png"},
+    {"light Metal", "textures/light_metal.png"},
     {"Rubber", "textures/rubber.png"},
     // Objects
     {"Fence Brick", "textures/BrickWall001a_Color.png"},

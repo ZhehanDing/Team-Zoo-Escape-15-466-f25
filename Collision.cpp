@@ -16,7 +16,7 @@ bool check_collision(
 namespace {
     const glm::vec3 PLAYER_HALF            = glm::vec3(1.0f, 1.0f, 1.0f);
     const glm::vec3 GATE_HALF              = glm::vec3(2.0f, 9.0f, 3.0f);
-    const glm::vec3 DEER_FENCE_HALF        = glm::vec3(33f, 39.0f, 3.0f);
+    const glm::vec3 DEER_FENCE_HALF        = glm::vec3(34.0f, 39.0f, 3.0f);
     const glm::vec3 ZOO_FENCE_NEAR_HALF    = glm::vec3(60.0f, 60.0f, 3.0f);
     const glm::vec3 ZOO_FENCE_FAR_HALF    = glm::vec3(60.0f, 44.0f, 3.0f);
 }
@@ -36,27 +36,6 @@ CollisionHits query_world_collisions(
     Scene::Transform *zoo_fence_far_collider
 ) {
     CollisionHits hits;
-
-    // printf("left_collider pos: %.2f, %.2f, %.2f, front_collider pos: %.2f, %.2f, %.2f, back_collider pos: %.2f, %.2f, %.2f, deer_fence_collider pos: %.2f, %.2f, %.2f, zoo_fence_near_collider pos: %.2f, %.2f, %.2f, zoo_fence_far_collider pos: %.2f, %.2f, %.2f\n",
-    //        left_collider ? left_collider->position.x : -1.0f,
-    //        left_collider ? left_collider->position.y : -1.0f,
-    //        left_collider ? left_collider->position.z : -1.0f,
-    //        front_collider ? front_collider->position.x : -1.0f,
-    //        front_collider ? front_collider->position.y : -1.0f,
-    //        front_collider ? front_collider->position.z : -1.0f,
-    //        back_collider ? back_collider->position.x : -1.0f,
-    //        back_collider ? back_collider->position.y : -1.0f,
-    //        back_collider ? back_collider->position.z : -1.0f,
-    //        deer_fence_collider ? deer_fence_collider->position.x : -1.0f,
-    //        deer_fence_collider ? deer_fence_collider->position.y : -1.0f,
-    //        deer_fence_collider ? deer_fence_collider->position.z : -1.0f,
-    //        zoo_fence_near_collider ? zoo_fence_near_collider->position.x : -1.0f,
-    //        zoo_fence_near_collider ? zoo_fence_near_collider->position.y : -1.0f,
-    //        zoo_fence_near_collider ? zoo_fence_near_collider->position.z : -1.0f,
-    //        zoo_fence_far_collider ? zoo_fence_far_collider->position.x : -1.0f,
-    //        zoo_fence_far_collider ? zoo_fence_far_collider->position.y : -1.0f,
-    //        zoo_fence_far_collider ? zoo_fence_far_collider->position.z : -1.0f
-    // );
 
     if (new_pos.y < MIN_Y || new_pos.y > MAX_Y || new_pos.x > MAX_X) {
         hits.out_of_bounds = true;
