@@ -40,7 +40,8 @@ struct PlayMode : Mode {
 	Scene scene;
 
 	std::vector<Civilian> civilians;
-
+	Scene::Transform *execution_target = nullptr;
+	
 	Scene::Transform *player = nullptr;
 	Scene::Transform *enemy = nullptr;
 	Scene::Transform *final_deer = nullptr;
@@ -122,7 +123,7 @@ struct PlayMode : Mode {
 	// Kill count & Dash skill unlock
 	int kill_count = 0;
 	bool dash_skill = false;
-	bool attraction_ability = false;  // unlocked after killing at least 2 enemies
+	bool attraction_ability = true;  // unlocked after killing at least 2 enemies
 	bool  dashing = false;
 	float dash_timer = 0.0f;       // remaining dash time (sec)
 	float dash_duration = 0.18f;   // how long a dash lasts
@@ -134,5 +135,8 @@ struct PlayMode : Mode {
 	std::vector<Sound::Sample const *> attraction_sounds; // <-- use raw pointers
 	std::mt19937 rng{123456u};       // simple RNG; you can seed with time if you want
 	float attraction_cooldown_timer = 0.0f;
-	float attraction_cooldown = 0.6f; // avoid accidental audio spam
+	float attraction_cooldown = 2.0f; // avoid accidental audio spam
+	std::vector<int> attraction_ids = {1, 2, 3, 4};
+	glm::vec3 pull_target = glm::vec3(0.0f);
+	bool being_pulled = false;
 };
