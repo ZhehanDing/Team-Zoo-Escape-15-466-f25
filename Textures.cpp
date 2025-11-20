@@ -49,7 +49,7 @@ const std::vector<NamedTexture> named_textures = {
     {"preset_0", "textures/modular_electricity_poles_diff_8k.png"},
     // {"Ground", "textures/compitition1_Branch_BaseColor.png"},
     // Animals
-    {"Tyriese_Miller_C_Deer_Idle:body", "textures/deer_skin_plain.png"},
+    {"Tyriese_Miller_C_Deer_Idle:body", "textures/deer_skin_light.png"},
     {"Tyriese_Miller_C_Deer_Idle:antler", "textures/bone.png"},
     {"Deer Behind Fence", "textures/deer_skin_plain.png"},
     {"Dead Deer", "textures/deer_skin_spotted.png"},
