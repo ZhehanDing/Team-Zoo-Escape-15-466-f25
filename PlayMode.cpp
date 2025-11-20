@@ -7,6 +7,7 @@
 #include "CopyToScreenProgram.hpp"
 #include "ParticleProgram.hpp"
 #include "Textures.hpp"
+#include "Collision.hpp"
 
 #include "Animation.hpp"
 #include "DrawLines.hpp"
@@ -232,7 +233,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		if (transform.name == "Sky") sky = &transform;
 		if (transform.name == "Gate") gate = &transform;
 		if (transform.name == "Collider_Deer Fence") deer_fence_collider = &transform;
-		// if (transform.name == "Forest Cabin") forest_cabin = &transform;
+		if (transform.name == "Collider_Zoo Fence Near") zoo_fence_near_collider = &transform;
 		// if (transform.name == "Small House Main") small_house = &transform;
 		// if (transform.name.rfind("Fence", 0) == 0)
 		// {
@@ -261,6 +262,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
 	if (gate == nullptr) throw std::runtime_error("gate not found.");
 	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
+	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
 
 	player_base_rotation = player->rotation;
 
@@ -603,13 +605,6 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	return false;
 }
 
-bool check_collision(glm::vec3 posA, glm::vec3 halfSizeA, glm::vec3 posB, glm::vec3 halfSizeB)
-{
-	return (std::abs(posA.x - posB.x) <= (halfSizeA.x + halfSizeB.x)) &&
-		   (std::abs(posA.y - posB.y) <= (halfSizeA.y + halfSizeB.y)) &&
-		   (std::abs(posA.z - posB.z) <= (halfSizeA.z + halfSizeB.z));
-}
-
 void PlayMode::update(float elapsed) {
 	if (game_over) {
 		// Optional: keep camera/UI effects, but block gameplay logic
@@ -675,29 +670,25 @@ void PlayMode::update(float elapsed) {
 			glm::vec3 frame_right = -frame[0];
 			glm::vec3 frame_forward = -frame[1];
 
-			// player->position += move.x * frame_right + move.y * frame_forward;
-
-			[[maybe_unused]]glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
-			
-
 			if (move != glm::vec2(0.0f))
 			{
-				// Define approximate hitboxes (adjust to your model scale)
-				glm::vec3 player_half(1.0f, 1.0f, 1.0f);
-				glm::vec3 gate_half(2.0f, 9.0f, 3.0f);
-				glm::vec3 deer_fence(35.0f, 35.0f, 3.0f);
+				glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
+				// printf("Trying move to: %.2f, %.2f, %.2f\n", new_pos.x, new_pos.y, new_pos.z);
 
-				bool hit_gate = check_collision(new_pos, player_half, gate->position, gate_half);
-				bool hit_deer_fence = check_collision(new_pos, player_half, deer_fence_collider->position, deer_fence);
-				if (!hit_gate && !hit_deer_fence)
+				CollisionHits hits = query_world_collisions(
+					new_pos,
+					gate,
+					deer_fence_collider,
+					zoo_fence_near_collider);
+
+				if (!hits.any())
 				{
-					printf("-- Player pos: (%.2f, %.2f, %.2f)\n", new_pos.x, new_pos.y, new_pos.z);
-					printf("Gate pos: (%.2f, %.2f, %.2f), Deer Fence pos: (%.2f, %.2f, %.2f)\n", gate->position.x, gate->position.y, gate->position.z, deer_fence_collider->position.x, deer_fence_collider->position.y, deer_fence_collider->position.z);
-					player->position = new_pos; // Only move if no collision
+					player->position = new_pos;
 				}
 				else
 				{
-					printf("hit_gate: %d, hit_deer_fence: %d\n", hit_gate, hit_deer_fence);
+					printf("hit_gate: %d, hit_deer_fence: %d, hit_zoo_fence_near: %d\n",
+						   hits.gate, hits.deer_fence, hits.zoo_fence_near);
 				}
 			}
 		}
