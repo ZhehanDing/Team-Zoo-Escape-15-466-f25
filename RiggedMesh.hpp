@@ -58,6 +58,7 @@ struct RiggedMesh {
 	GLuint program = 0;
 	GLuint vbo_vert = 0;
 	GLuint vbo_bone = 0;
+	GLuint pose_ubo = 0;
 
 	// source is MeshBuffer::buffer where the mesh data exists for purpose of vao creation
 	RiggedMesh(
@@ -86,6 +87,8 @@ struct RiggedMesh {
 	// binds the mesh to the skeleton via bone weight information
 	//void bind(std::vector < BoneInfluence > infls);
 	void update(float elapsed);
+
+	void bind_pose_ubo() const;
 
 	//glm::mat4 mesh_from_world;
 	//glm::mat4 world_from_mesh;

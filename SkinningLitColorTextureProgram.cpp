@@ -54,7 +54,7 @@ SkinningLitColorTextureProgram::SkinningLitColorTextureProgram() {
 		"uniform mat4 CLIP_FROM_OBJECT;\n"
 		"uniform mat4x3 LIGHT_FROM_OBJECT;\n"
 		"uniform mat3 LIGHT_FROM_NORMAL;\n"
-		"uniform mat4x3 POSE[" + std::to_string(BONE_LIMIT) + "];\n"
+		"layout(std140) uniform PoseBlock { mat4 POSE[" + std::to_string(BONE_LIMIT) + "]; };\n"
 		"in vec4 Position;\n"
 		"in vec3 Normal;\n"
 		"in vec4 Color;\n"
@@ -66,21 +66,21 @@ SkinningLitColorTextureProgram::SkinningLitColorTextureProgram() {
 		"out vec4 color;\n"
 		"out vec2 texCoord;\n"
 		"void main() {\n"
-		"   vec3 skinned_position = (\n"
-		"   	BoneWeights.x * POSE[ BoneIndices.x ] +\n"
-		"   	BoneWeights.y * POSE[ BoneIndices.y ] +\n"
-		"   	BoneWeights.z * POSE[ BoneIndices.z ] +\n"
-		"   	BoneWeights.w * POSE[ BoneIndices.w ]) * Position;\n"
+		"   vec4 skinned_pos4 = (\n"
+		"   \tBoneWeights.x * POSE[ BoneIndices.x ] +\n"
+		"   \tBoneWeights.y * POSE[ BoneIndices.y ] +\n"
+		"   \tBoneWeights.z * POSE[ BoneIndices.z ] +\n"
+		"   \tBoneWeights.w * POSE[ BoneIndices.w ]) * Position;\n"
 		"   vec3 skinned_normal = (\n"
-		"   	BoneWeights.x * mat3(POSE[ BoneIndices.x ]) +\n"
-		"   	BoneWeights.y * mat3(POSE[ BoneIndices.y ]) +\n"
-		"   	BoneWeights.z * mat3(POSE[ BoneIndices.z ]) +\n"
-		"   	BoneWeights.w * mat3(POSE[ BoneIndices.w ])) * Normal;\n" // maybe push inverse pose info to compute normal
-		"	gl_Position = CLIP_FROM_OBJECT * vec4(skinned_position, 1.0);\n"
-		"	position = LIGHT_FROM_OBJECT * vec4(skinned_position, 1.0);\n"
-		"	normal = LIGHT_FROM_NORMAL * skinned_normal;\n"
-		"	color = Color;\n"
-		"	texCoord = TexCoord;\n"
+		"   \tBoneWeights.x * mat3(POSE[ BoneIndices.x ]) +\n"
+		"   \tBoneWeights.y * mat3(POSE[ BoneIndices.y ]) +\n"
+		"   \tBoneWeights.z * mat3(POSE[ BoneIndices.z ]) +\n"
+		"   \tBoneWeights.w * mat3(POSE[ BoneIndices.w ])) * Normal;\n" // maybe push inverse pose info to compute normal
+		"\tgl_Position = CLIP_FROM_OBJECT * skinned_pos4;\n"
+		"\tposition = LIGHT_FROM_OBJECT * skinned_pos4;\n"
+		"\tnormal = LIGHT_FROM_NORMAL * skinned_normal;\n"
+		"\tcolor = Color;\n"
+		"\ttexCoord = TexCoord;\n"
 		"}\n"
 	,
 		//fragment shader:
@@ -156,7 +156,9 @@ SkinningLitColorTextureProgram::SkinningLitColorTextureProgram() {
 	LIGHT_FROM_OBJECT_mat4x3 = glGetUniformLocation(program, "LIGHT_FROM_OBJECT");
 	LIGHT_FROM_NORMAL_mat3 = glGetUniformLocation(program, "LIGHT_FROM_NORMAL");
 
-	BONE_POSE_mat4x3 = glGetUniformLocation(program, "POSE");
+	// Bind the PoseBlock uniform block (std140, binding = 3)
+	GLuint pose_block = glGetUniformBlockIndex(program, "PoseBlock");
+	if (pose_block != GL_INVALID_INDEX) glUniformBlockBinding(program, pose_block, 3);
 
 	LIGHT_TYPE_int = glGetUniformLocation(program, "LIGHT_TYPE");
 	LIGHT_LOCATION_vec3 = glGetUniformLocation(program, "LIGHT_LOCATION");

@@ -219,7 +219,8 @@ AnimationBuffer< T >::AnimationBuffer(std::string const &filename) {
             } 
 
             std::string name(&strings[0] + anim_entry.name_begin, &strings[0] + anim_entry.name_end);
-            Animation< T > anim(name, fps, true);
+            bool should_loop = (name == "Stand" || name == "Walk" || name == "Run");
+            Animation< T > anim(name, fps, should_loop);
             anim.data.assign(
                 data.begin() + anim_entry.keyframe_begin,
                 data.begin() + anim_entry.keyframe_end
