@@ -19,8 +19,10 @@ How To Play:
 ```
 /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.scene
 
-/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rigged_meshes.py -- scenes/zoo_nolink.blend:Main dist/Gate.pnct dist/Gate.infl
-/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rig.py          -- scenes/zoo_nolink.blend:Main dist/Gate.skel dist/Gate.anim
+/Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/gate.blend:Main dist/gate.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/gate.blend:Main dist/gate.scene
+
+/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rigged_meshes.py -- scenes/gate.blend:Main dist/Gate.pnct dist/Gate.infl
+/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rig.py          -- scenes/gate.blend:Main dist/Gate.skel dist/Gate.anim
 
 node Maekfile.js && dist/game
 ```

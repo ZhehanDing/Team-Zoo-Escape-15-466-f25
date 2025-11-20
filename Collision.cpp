@@ -23,7 +23,7 @@ namespace {
 
 namespace { // bounds for the playable area
     constexpr float MIN_Y = -80.0f;
-    constexpr float MAX_Y = 71.0f;
+    constexpr float MAX_Y = 100.0f;
     constexpr float MAX_X = 59.0f;
 }
 

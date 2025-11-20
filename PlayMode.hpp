@@ -67,6 +67,21 @@ struct PlayMode : Mode {
 	float enemy_mesh_scale = 1.0f;
 	glm::vec3 enemy_mesh_offset = glm::vec3(0.0f);
 
+	// Gate
+	std::unique_ptr< Skeleton > gate_skeleton;
+	AnimationGraph< Skeleton::BoneTransform > gate_graph =
+    AnimationGraph< Skeleton::BoneTransform >(
+        [](Skeleton::BoneTransform const &a,
+           Skeleton::BoneTransform const &b,
+           float t) {
+            Skeleton::BoneTransform out;
+            out.position = glm::mix(a.position, b.position, t);
+            out.rotation = glm::normalize(glm::slerp(a.rotation, b.rotation, t));
+            out.scale    = glm::mix(a.scale, b.scale, t);
+            return out;
+        });
+	std::unique_ptr< RiggedMesh > gate_rig;
+
 	//camera:
 	Camera *cam;
 	Scene::Camera *camera = nullptr;

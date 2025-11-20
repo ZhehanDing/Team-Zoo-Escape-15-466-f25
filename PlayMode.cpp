@@ -180,6 +180,8 @@ struct FB {
 	}
 } fb;
 
+// -- Meshes, skeletons, animations, and bone influences --
+// Human
 Load< MeshBuffer > human_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	return new MeshBuffer(data_path("human.pnct"));
 });
@@ -195,6 +197,24 @@ Load< SkeletonBuffer > human_skeletons(LoadTagDefault, []() -> SkeletonBuffer co
 Load< AnimationBuffer< Skeleton::BoneTransform > > human_animations(LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
 	return new AnimationBuffer< Skeleton::BoneTransform >(data_path("human.anim"));
 });
+
+// Gate
+Load< MeshBuffer > gate_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+    return new MeshBuffer(data_path("gate.pnct"));
+});
+
+Load< BoneInfluenceBuffer > gate_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
+    return new BoneInfluenceBuffer(data_path("Gate.infl"));
+});
+
+Load< SkeletonBuffer > gate_skeletons(LoadTagDefault, []() -> SkeletonBuffer const * {
+    return new SkeletonBuffer(data_path("Gate.skel"));
+});
+
+Load< AnimationBuffer< Skeleton::BoneTransform > > gate_animations(
+    LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
+        return new AnimationBuffer< Skeleton::BoneTransform >(data_path("Gate.anim"));
+    });
 
 
 static const char *civilian_mesh_names[] = {
@@ -232,19 +252,8 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		if (transform.name == "Collider_Deer Fence") deer_fence_collider = &transform;
 		if (transform.name == "Collider_Zoo Fence Near") zoo_fence_near_collider = &transform;
 		if (transform.name == "Collider_Zoo Fence Far") zoo_fence_far_collider = &transform;
-		// if (transform.name == "Collider_Left") left_collider = &transform;
-		// if (transform.name == "Collider_Front") front_collider = &transform;
-		// if (transform.name == "Collider_Back") back_collider = &transform;
 		// if (transform.name == "Small House Main") small_house = &transform;
-		// if (transform.name.rfind("Fence", 0) == 0)
-		// {
-		// 	fences.push_back(&transform);
-		// 	// printf("Found fence: %s\n", transform.name.c_str());
-		// }
-		// if (transform.name.rfind("Low Poly Evergreen Tree", 0) == 0)
-		// {
-		// 	trees.push_back(&transform);
-		// }
+	
 		// if (transform.name.rfind("Wood Cylinder", 0) == 0)
 		// {
 		// 	cylinders.push_back(&transform);
@@ -264,9 +273,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
 	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
 	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
-	// if (left_collider == nullptr) throw std::runtime_error("left_collider not found.");
-	// if (front_collider == nullptr) throw std::runtime_error("front_collider not found.");
-	// if (back_collider == nullptr) throw std::runtime_error("back_collider not found.");
 
 	player_base_rotation = player->rotation;
 
@@ -276,6 +282,8 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	// 	}
 	// }
 
+	// -- Handle skeleton --
+	// Enemy
 	Mesh const &human_mesh = human_meshes->lookup("base.001");
 	Skeleton const &human_skel = human_skeletons->lookup("Human.rigify");
 
@@ -343,7 +351,30 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		make_civilian(center + glm::vec3(x, y, 0.3f));
 	}
 
-	// populate rigged mesh
+	// Gate
+	// 1) Look up the gate mesh from gate.pnct
+	//    Use the name printed by the exporter; your log said: Writing 'Circle.001'...
+	//    If you renamed it in Blender before exporting, substitute that name.
+	Mesh const &gate_mesh = gate_meshes->lookup("Circle.001"); // or "Gate" if you renamed the mesh
+
+	// 2) Look up the skeleton from Gate.skel
+	Skeleton const &gate_skel = gate_skeletons->lookup("Controller");
+
+	// 3) Create a runtime Skeleton
+	gate_skeleton = std::make_unique<Skeleton>(gate_skel);
+
+	// 4) Reuse the same interpolation function g (already defined above)
+	gate_graph = AnimationGraph< Skeleton::BoneTransform>(g);
+
+	// 5) Add the GateOpen state from Gate.anim
+	gate_graph.add_state(gate_animations->lookup("GateOpen"));
+
+	// 6) Construct the RiggedMesh
+	gate_rig = std::make_unique<RiggedMesh>(
+		gate_meshes->buffer, gate_infls->buffer, gate_mesh, *gate_skeleton, &gate_graph);
+
+	// -- populate rigged mesh --
+	// Enemy
 	scene.drawables.emplace_back(enemy);
 	Scene::Drawable &enemy_drawable = scene.drawables.back();
 	enemy_drawable.pipeline = skinning_program_pipeline;
@@ -352,6 +383,16 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	enemy_drawable.pipeline.type = enemy_rig->mesh.type;
 	enemy_drawable.pipeline.start = enemy_rig->mesh.start;
 	enemy_drawable.pipeline.count = enemy_rig->mesh.count;
+
+	// Gate
+	scene.drawables.emplace_back(gate);
+	Scene::Drawable &gate_drawable = scene.drawables.back();
+	gate_drawable.pipeline = skinning_program_pipeline;
+	gate_drawable.pipeline.vao =
+		gate_rig->make_vao_for_program(skinning_program->program);
+	gate_drawable.pipeline.type = gate_rig->mesh.type;
+	gate_drawable.pipeline.start = gate_rig->mesh.start;
+	gate_drawable.pipeline.count = gate_rig->mesh.count;
 
 	// get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -676,10 +717,11 @@ void PlayMode::update(float elapsed) {
 			enemy_collapsing = false; // finished collapsing
 		}
 	}
-	// animate human
+	// animate
 	enemy->scale = glm::vec3(1.5f);
 	// enemy_graph.update(elapsed);
 	enemy_rig->update(elapsed);
+	if (gate_rig)  gate_rig->update(elapsed);
 
 	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 
@@ -1168,7 +1210,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		glm::vec4 c_clip  = clip_from_world * glm::vec4(c_world, 1.0f);
 
 		if (c_clip.w > 0.0f) {
-			glm::vec3 c_ndc = glm::vec3(c_clip) / c_clip.w;
+			// glm::vec3 c_ndc = glm::vec3(c_clip) / c_clip.w;
 			// ... existing draw_lines / crosshair overlay code, just driven by c_ndc instead of enemy
 		}
 	}
