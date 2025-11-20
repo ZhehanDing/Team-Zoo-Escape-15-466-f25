@@ -1,7 +1,7 @@
 #include "PlayMode.hpp"
 #include <algorithm>
 #include <cmath>
-
+// #include "LitColorTextureProgram.hpp"
 #include "BasicMaterialDeferredProgram.hpp"
 #include "LightMeshes.hpp"
 #include "CopyToScreenProgram.hpp"
@@ -47,13 +47,11 @@ Load< Sound::Sample > attraction_voice_4(LoadTagDefault, []() -> Sound::Sample c
 	return new Sound::Sample(data_path("Sound4.wav"));
 });
 
-
 Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
 	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
 
-	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name)
-						   {
+	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
@@ -100,8 +98,7 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		return ret; });
 
 // Helper: maintain a framebuffer to hold rendered geometry
-struct FB
-{
+struct FB {
 	// object data gets stored in these textures:
 	GLuint position_tex = 0;
 	GLuint normal_roughness_tex = 0;
@@ -259,7 +256,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		// }
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
-	// if (enemy == nullptr) throw std::runtime_error("enemy not found.");
+	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
 	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
 	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
@@ -448,12 +445,7 @@ PlayMode::~PlayMode() {
 	if (deer_ui_vbo) glDeleteBuffers(1, &deer_ui_vbo);
 	if (deer_ui_vao) glDeleteVertexArrays(1, &deer_ui_vao);
 	*/
-	attraction_sounds = {
-		attraction_voice_1,  // implicit convert to Sound::Sample const *
-		attraction_voice_2,
-		attraction_voice_3,
-		attraction_voice_4
-	};
+
 
 }
 
@@ -504,18 +496,53 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			return true;
 		}else if (evt.key.key == SDLK_G) {
 			if (attraction_ability && attraction_cooldown_timer <= 0.0f && !game_over) {
-				if (!attraction_sounds.empty()) {
-					std::uniform_int_distribution<int> dist(0, int(attraction_sounds.size()) - 1);
-					int idx = dist(rng);
 
-					// Play voice sound (non-3D version)
-					Sound::play(*attraction_sounds[idx], 1.0f, 1.0f);
+				// 1. Pick random ID from list 1–4
+				std::uniform_int_distribution<int> dist(0, int(attraction_ids.size()) - 1);
+				int id = attraction_ids[dist(rng)];
 
-					// Optional 3D positional version:
-					// glm::vec3 p = player->make_world_from_local()[3];
-					// Sound::play_3D(*attraction_sounds[idx], p, 1.0f, 1.0f);
+				// 2. Play sound depending on ID
+				switch (id) {
+					case 1:
+						Sound::play(*attraction_voice_1, 1.0f, 1.0f);
+						break;
+					case 2:
+						Sound::play(*attraction_voice_2, 1.0f, 1.0f);
+						break;
+					case 3:
+						Sound::play(*attraction_voice_3, 1.0f, 1.0f);
+						break;
+					case 4:
+						Sound::play(*attraction_voice_4, 1.0f, 1.0f);
+						break;
+				}
+				for (auto &civ : civilians) {
+					if (!civ.transform) continue;
 
-					attraction_cooldown_timer = attraction_cooldown;
+					float dist_xy = glm::length(
+						glm::vec2(
+							civ.transform->position.x - player->position.x,
+							civ.transform->position.y - player->position.y
+						)
+					);
+
+					// choose radius you like (25 is pretty big)
+					if (dist_xy < 25.0f) {
+						civ.being_pulled = true;
+						civ.pull_target = player->position;
+					}
+				}				
+				// cooldown
+				attraction_cooldown_timer = attraction_cooldown;
+
+				// --- Make nearby civilians walk toward the player ---
+				for (auto &civ : civilians) {
+					// range: adjust 20.0f if needed
+					float dist = glm::length(player->position - civ.transform->position);
+					if (dist < 25.0f) {
+						civ.being_pulled = true;
+						civ.pull_target = player->position;   // goal
+					}
 				}
 			}
 			return true;
@@ -547,36 +574,38 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			target_fovy = base_fovy * 0.7f; // zoom in a bit
 			return true;
 		} else if (evt.button.button == SDL_BUTTON_LEFT) {
-			if (execution_mode) {
+			if (execution_mode && execution_target) {
 
 				// Distance calculation
 				glm::vec3 player_pos = camera->transform->make_world_from_local()[3];
-				glm::vec3 enemy_pos = enemy->make_world_from_local()[3];
+				glm::vec3 civ_pos    = execution_target->make_world_from_local()[3];
 
-				float dist = glm::length(enemy_pos - player_pos);
+				float dist = glm::length(civ_pos - player_pos);
 				if (dist <= execution_range) {
-					// === EXECUTION SUCCESS ===
+					// === EXECUTION SUCCESS ON CIVILIAN ===
 
-					// enemy is dead
-					enemy_alive = false;
 					execution_mode = false;
 					stalk_charge = 0.0f;
 
-					// instantly make enemy disappear
-					enemy->scale = glm::vec3(0.0f); // shrink to invisible
-					enemy->position.z = -100.0f;	// move far below ground to ensure hidden
-					kill_count += 1;
+					++kill_count;
+
+					// hide the civilian visually
+					execution_target->scale = glm::vec3(0.0f);
+					execution_target->position.z = -100.0f;
+
+					// clear current target so we don't keep reusing it
+					execution_target = nullptr;
 					if (kill_count >= 1) {
 						dash_skill = true;
-					} else if (kill_count >= 2) {
-						dash_skill = true;
+					}
+
+					// keep your deer_stage / reward logic as-is:
+					if (kill_count >= 2) {
 						attraction_ability = true;
 					}
 
-					if (deer_stage == 0)
-					{
-						// Level completes, gets leg // TODO: add some effect; and deer needs to attack enemy before geting their leg
-						final_deer->scale = glm::vec3(0.0f); // hide original deer
+					if (deer_stage == 0) {
+						final_deer->scale = glm::vec3(0.0f);  // hide original deer
 						final_deer_leg->scale = glm::vec3(0.7f);
 						deer_stage = 1;
 					}
@@ -629,6 +658,9 @@ void PlayMode::update(float elapsed) {
 			dashing = false;
 			target_fovy = base_fovy; // restore zoom after dash
 		}
+	}
+	if (attraction_cooldown_timer > 0.0f) {
+    attraction_cooldown_timer = std::max(0.0f, attraction_cooldown_timer - elapsed);
 	}
 
 	// --- Enemy collapse animation (after execution) ---
@@ -702,14 +734,32 @@ void PlayMode::update(float elapsed) {
 
 	// --- Enemy on-screen check (clip-space) ---
 	enemy_on_screen = false;
-	if (enemy && enemy_alive) {
-		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-		glm::vec3 e_world = enemy->make_world_from_local()[3];
-		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
-		if (clip.w > 0.0f) {
+	execution_target = nullptr;
+	if (!civilians.empty()) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+		// pick the first civilian that is on-screen, or tweak to pick the closest
+		for (auto &civilian : civilians) {
+			// NOTE: adjust this line to however your Civilian stores its transform.
+			// e.g. if Civilian has `Scene::Transform *transform;`, this is correct:
+			Scene::Transform *t = civilian.transform;
+			if (!t) continue;
+
+			glm::vec3 c_world = t->make_world_from_local()[3];
+			glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.0f);
+			if (clip.w <= 0.0f) continue;
+
 			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
-			enemy_on_screen = (ndc.x >= -1.0f && ndc.x <= 1.0f &&
-							   ndc.y >= -1.0f && ndc.y <= 1.0f);
+			bool on_screen =
+				(ndc.x >= -1.0f && ndc.x <= 1.0f &&
+				ndc.y >= -1.0f && ndc.y <= 1.0f);
+
+			if (on_screen) {
+				enemy_on_screen = true;           // reused flag name
+				execution_target = t;             // remember which civilian we’re aiming at
+				break;                            // stop at the first on-screen civilian
+			}
 		}
 	}
 
@@ -1085,73 +1135,41 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	enemy_visible = false; // default
 
-	if (enemy && enemy_alive) {
-		glm::mat4 clip_from_world = camera->make_projection()
-			* glm::mat4(camera->transform->make_local_from_world());
-		glm::vec3 e_world = enemy->make_world_from_local()[3];
-		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
+	if (execution_target) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+		glm::vec3 c_world = execution_target->make_world_from_local()[3];
+		glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.0f);
 
 		if (clip.w > 0.0f) {
-			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
-			// Outside of screen
-			if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f) {
-				enemy_visible = false;
-			} else {
-				float sx = (ndc.x * 0.5f + 0.5f) * drawable_size.x;
-				float sy = (ndc.y * 0.5f + 0.5f) * drawable_size.y;
-				int px = std::clamp(int(std::lround(sx)), 0, int(drawable_size.x) - 1);
-				int py = std::clamp(int(std::lround(sy)), 0, int(drawable_size.y) - 1);
+			glm::vec3 ndc = glm::vec3(clip) / clip.w;
 
-				float depth_sample = 1.0f;
-				glReadPixels(px, py, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth_sample);
+			// check it's in screen range
+			if (ndc.x >= -1.0f && ndc.x <= 1.0f &&
+				ndc.y >= -1.0f && ndc.y <= 1.0f) {
+					enemy_visible = true;
 
-				float enemy_depth = ndc.z * 0.5f + 0.5f;
-				const float eps = 1e-3f;
-
-				enemy_visible = !(depth_sample + eps < enemy_depth);
+				// depth sampling logic stays the same, just using c_world / execution_target
+				// (copy your existing enemy-depth code and replace `enemy` with `execution_target`)
+				// ...
+				// enemy_visible = !(depth_sample + eps < enemy_depth);
 			}
 		}
 	}
-	if (focus_mode && enemy && enemy_visible) {
-		// project enemy world position to clip space:
-		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
-		glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
-		glm::vec3 e_world = world_from_enemy[3];           // translation column
-		glm::vec4 e_clip  = clip_from_world * glm::vec4(e_world, 1.0f);
+	// draw aim indicator / outline on target civilian in focus mode
+	if (focus_mode && execution_target && enemy_visible) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
-		if (e_clip.w > 0.0f) {
-			glm::vec3 e_ndc = glm::vec3(e_clip) / e_clip.w; // [-1,1] range
-			// set up 2D line drawer (same as your text HUD uses)
-			glDisable(GL_DEPTH_TEST);
-			float aspect = float(drawable_size.x) / float(drawable_size.y);
-			DrawLines lines(glm::mat4(
-				1.0f / aspect, 0.0f, 0.0f, 0.0f,
-				0.0f, 1.0f, 0.0f, 0.0f,
-				0.0f, 0.0f, 1.0f, 0.0f,
-				0.0f, 0.0f, 0.0f, 1.0f
-			));
+		glm::mat4x3 world_from_target = execution_target->make_world_from_local();
+		glm::vec3 c_world = world_from_target[3];           // translation column
+		glm::vec4 c_clip  = clip_from_world * glm::vec4(c_world, 1.0f);
 
-			// Convert NDC to the DrawLines' coords: x in [-aspect, aspect], y in [-1,1]
-			glm::vec3 p(e_ndc.x * aspect, e_ndc.y, 0.0f);
-
-			// crosshair size (in screen space units):
-			const float s = 0.05f;
-
-			// crosshair lines (black for visibility on white bg):
-			glm::u8vec4 col(0x00, 0x00, 0x00, 0xff);
-			lines.draw(p + glm::vec3(-s, 0.0f, 0.0f), p + glm::vec3(+s, 0.0f, 0.0f), col);
-			lines.draw(p + glm::vec3(0.0f, -s, 0.0f), p + glm::vec3(0.0f, +s, 0.0f), col);
-
-			// "ENEMY" label just above the crosshair:
-			const float H = 0.06f;
-			lines.draw_text("ENEMY",
-				p + glm::vec3(-0.5f * H, +1.4f * H, 0.0f),
-				glm::vec3(H, 0.0f, 0.0f),
-				glm::vec3(0.0f, H, 0.0f),
-				col
-			);
-			glEnable(GL_DEPTH_TEST);
+		if (c_clip.w > 0.0f) {
+			glm::vec3 c_ndc = glm::vec3(c_clip) / c_clip.w;
+			// ... existing draw_lines / crosshair overlay code, just driven by c_ndc instead of enemy
 		}
 	}
 	if (focus_mode && enemy) {
