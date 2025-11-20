@@ -16,14 +16,16 @@ bool check_collision(
 namespace {
     const glm::vec3 PLAYER_HALF            = glm::vec3(1.0f, 1.0f, 1.0f);
     const glm::vec3 GATE_HALF              = glm::vec3(2.0f, 9.0f, 3.0f);
-    const glm::vec3 DEER_FENCE_HALF        = glm::vec3(32.5f, 39.0f, 3.0f);
+    const glm::vec3 DEER_FENCE_HALF        = glm::vec3(33f, 39.0f, 3.0f);
     const glm::vec3 ZOO_FENCE_NEAR_HALF    = glm::vec3(60.0f, 60.0f, 3.0f);
     const glm::vec3 ZOO_FENCE_FAR_HALF    = glm::vec3(60.0f, 44.0f, 3.0f);
-    const glm::vec3 LEFT_HALF    = glm::vec3(5.0f, 100.0f, 3.0f);
-    const glm::vec3 FRONT_HALF    = glm::vec3(65.0f, 5.0f, 3.0f);
-    const glm::vec3 BACK_HALF    = glm::vec3(65.0f, 5.0f, 3.0f);
 }
 
+namespace { // bounds for the playable area
+    constexpr float MIN_Y = -80.0f;
+    constexpr float MAX_Y = 71.0f;
+    constexpr float MAX_X = 59.0f;
+}
 
 // --- Public function used by PlayMode.cpp ---
 CollisionHits query_world_collisions(
@@ -31,10 +33,7 @@ CollisionHits query_world_collisions(
     Scene::Transform *gate,
     Scene::Transform *deer_fence_collider,
     Scene::Transform *zoo_fence_near_collider,
-    Scene::Transform *zoo_fence_far_collider,
-    Scene::Transform *left_collider,
-    Scene::Transform *front_collider,
-    Scene::Transform *back_collider
+    Scene::Transform *zoo_fence_far_collider
 ) {
     CollisionHits hits;
 
@@ -59,6 +58,11 @@ CollisionHits query_world_collisions(
     //        zoo_fence_far_collider ? zoo_fence_far_collider->position.z : -1.0f
     // );
 
+    if (new_pos.y < MIN_Y || new_pos.y > MAX_Y || new_pos.x > MAX_X) {
+        hits.out_of_bounds = true;
+        return hits;
+    }
+
     if (gate) {
         hits.gate = check_collision(new_pos, PLAYER_HALF, gate->position, GATE_HALF);
     }
@@ -70,15 +74,6 @@ CollisionHits query_world_collisions(
     }
     if (zoo_fence_far_collider) {
         hits.zoo_fence_far = check_collision(new_pos, PLAYER_HALF, zoo_fence_far_collider->position, ZOO_FENCE_FAR_HALF);
-    }
-    if (left_collider) {
-        hits.left = check_collision(new_pos, PLAYER_HALF, left_collider->position, LEFT_HALF);
-    }
-    if (front_collider) {
-        hits.front = check_collision(new_pos, PLAYER_HALF, front_collider->position, FRONT_HALF);
-    }
-    if (back_collider) {
-        hits.back = check_collision(new_pos, PLAYER_HALF, back_collider->position, BACK_HALF);
     }
 
     return hits;

@@ -54,7 +54,7 @@ const std::vector<NamedTexture> named_textures = {
     {"Deer Behind Fence", "textures/deer_skin_plain.png"},
     {"Dead Deer", "textures/deer_skin_spotted.png"},
     {"Rat", "textures/rat.png"},
-    {"Ground", "textures/grass.png"},
+    {"Ground", "textures/grass_blue.png"},
     {"177d920ddde57c74f8e1ef18863ab511", "textures/sign.png"},
     {"Zoo Sign.001", "textures/zoo_sign_1.png"},
     {"Zoo Sign.002", "textures/zoo_sign_2.png"},
@@ -78,7 +78,7 @@ const std::vector<NamedTexture> named_textures = {
     {"Mossy Rock 2", "textures/rock_2.png"},
     {"Wild Grass", "textures/Grass_basecolor.png"},
     // Cars
-    {"licensePlate", "textures/license plate.png"},
+    {"lincensePlate", "textures/license plate.png"},
     {"Volvo body 1", "textures/blue_metal.png"},
     {"Volvo body 2", "textures/red_metal.png"},
     {"rim", "textures/rubber.png"},

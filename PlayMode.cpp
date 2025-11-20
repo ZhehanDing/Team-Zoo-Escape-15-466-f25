@@ -235,9 +235,9 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		if (transform.name == "Collider_Deer Fence") deer_fence_collider = &transform;
 		if (transform.name == "Collider_Zoo Fence Near") zoo_fence_near_collider = &transform;
 		if (transform.name == "Collider_Zoo Fence Far") zoo_fence_far_collider = &transform;
-		if (transform.name == "Collider_Left") left_collider = &transform;
-		if (transform.name == "Collider_Front") front_collider = &transform;
-		if (transform.name == "Collider_Back") back_collider = &transform;
+		// if (transform.name == "Collider_Left") left_collider = &transform;
+		// if (transform.name == "Collider_Front") front_collider = &transform;
+		// if (transform.name == "Collider_Back") back_collider = &transform;
 		// if (transform.name == "Small House Main") small_house = &transform;
 		// if (transform.name.rfind("Fence", 0) == 0)
 		// {
@@ -261,15 +261,15 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	// if (enemy == nullptr) throw std::runtime_error("enemy not found.");
 	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
-	// if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
+	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
 	if (gate == nullptr) throw std::runtime_error("gate not found.");
 	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
 	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
 	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
-	if (left_collider == nullptr) throw std::runtime_error("left_collider not found.");
-	if (front_collider == nullptr) throw std::runtime_error("front_collider not found.");
-	if (back_collider == nullptr) throw std::runtime_error("back_collider not found.");
+	// if (left_collider == nullptr) throw std::runtime_error("left_collider not found.");
+	// if (front_collider == nullptr) throw std::runtime_error("front_collider not found.");
+	// if (back_collider == nullptr) throw std::runtime_error("back_collider not found.");
 
 	player_base_rotation = player->rotation;
 
@@ -687,10 +687,7 @@ void PlayMode::update(float elapsed) {
 					gate,
 					deer_fence_collider,
 					zoo_fence_near_collider,
-					zoo_fence_far_collider,
-					left_collider,
-					front_collider,
-					back_collider);
+					zoo_fence_far_collider);
 
 				if (!hits.any())
 				{
@@ -699,7 +696,6 @@ void PlayMode::update(float elapsed) {
 				}
 				else
 				{
-					
 				}
 			}
 		}

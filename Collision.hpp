@@ -4,16 +4,17 @@
 #include <glm/glm.hpp>
 
 struct CollisionHits {
+    bool out_of_bounds = false;
+
     bool gate = false;
     bool deer_fence = false;
     bool zoo_fence_near = false;
     bool zoo_fence_far = false;
-    bool left = false;
-    bool front = false;
-    bool back = false;
 
     bool any() const {
-        return gate || deer_fence || zoo_fence_near;
+        // printf("CollisionHits: out_of_bounds=%d, gate=%d, deer_fence=%d, zoo_fence_near=%d, zoo_fence_far=%d\n",
+        //        out_of_bounds, gate, deer_fence, zoo_fence_near, zoo_fence_far);
+        return out_of_bounds || gate || deer_fence || zoo_fence_near;
     }
 };
 
@@ -23,10 +24,7 @@ CollisionHits query_world_collisions(
     Scene::Transform *gate,
     Scene::Transform *deer_fence_collider,
     Scene::Transform *zoo_fence_near_collider,
-    Scene::Transform *zoo_fence_far_collider,
-    Scene::Transform *left_collider,
-    Scene::Transform *front_collider,
-    Scene::Transform *back_collider
+    Scene::Transform *zoo_fence_far_collider
 );
 
 // Simple AABB test
