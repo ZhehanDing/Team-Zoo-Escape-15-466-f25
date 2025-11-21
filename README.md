@@ -19,10 +19,7 @@ How To Play:
 ```
 /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.scene
 
-/Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/gate.blend:Main dist/gate.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/gate.blend:Main dist/gate.scene
-
-/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rigged_meshes.py -- scenes/gate.blend:Main dist/Gate.pnct dist/Gate.infl
-/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rig.py          -- scenes/gate.blend:Main dist/Gate.skel dist/Gate.anim
+/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rigged_meshes.py -- scenes/gate.blend:Main dist/Gate.pnct dist/Gate.infl && /Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rig.py          -- scenes/gate.blend:Main dist/Gate.skel dist/Gate.anim
 
 node Maekfile.js && dist/game
 ```
@@ -49,6 +46,8 @@ Mossy Rock 2: https://www.blenderkit.com/get-blenderkit/b2f6f8b2-72d3-4444-9bcf-
 Off-Road 4x4 vehicle mud: https://www.blenderkit.com/get-blenderkit/5e4301db-f419-40d5-830b-cb3f23cd8d1d/
 Forest Cabin: https://www.blenderkit.com/get-blenderkit/a1b23c3e-5e04-4ee5-8dc5-ce4016d0e90a/
 Small House: https://www.blenderkit.com/get-blenderkit/6f015242-11e7-45af-a02d-8a17c7b555e6/
+Fish Statue: https://www.blenderkit.com/get-blenderkit/c5430fcc-5e14-44f1-bd82-e4c5d1932408/
+Sculpture of an old angry bear: https://www.blenderkit.com/get-blenderkit/c8113ecf-17d1-44f7-b006-5256ac6547e1/
 
 This game was built with [NEST](NEST.md).
 

@@ -249,6 +249,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		}
 		if (transform.name == "Sky") sky = &transform;
 		if (transform.name == "Gate") gate = &transform;
+		if (transform.name == "Collider_Gate") gate_collider = &transform;
 		if (transform.name == "Collider_Deer Fence") deer_fence_collider = &transform;
 		if (transform.name == "Collider_Zoo Fence Near") zoo_fence_near_collider = &transform;
 		if (transform.name == "Collider_Zoo Fence Far") zoo_fence_far_collider = &transform;
@@ -270,6 +271,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
 	if (gate == nullptr) throw std::runtime_error("gate not found.");
+	if (gate_collider == nullptr) throw std::runtime_error("gate_collider not found.");
 	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
 	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
 	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
@@ -352,26 +354,12 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	}
 
 	// Gate
-	// 1) Look up the gate mesh from gate.pnct
-	//    Use the name printed by the exporter; your log said: Writing 'Circle.001'...
-	//    If you renamed it in Blender before exporting, substitute that name.
-	Mesh const &gate_mesh = gate_meshes->lookup("Circle.001"); // or "Gate" if you renamed the mesh
-
-	// 2) Look up the skeleton from Gate.skel
+	Mesh const &gate_mesh = gate_meshes->lookup("Circle.001");
 	Skeleton const &gate_skel = gate_skeletons->lookup("Controller");
-
-	// 3) Create a runtime Skeleton
 	gate_skeleton = std::make_unique<Skeleton>(gate_skel);
-
-	// 4) Reuse the same interpolation function g (already defined above)
-	gate_graph = AnimationGraph< Skeleton::BoneTransform>(g);
-
-	// 5) Add the GateOpen state from Gate.anim
+	gate_graph = AnimationGraph< Skeleton::BoneTransform>(g); // Reuse the same interpolation function g (already defined above) // TODO: avoid duplicate
 	gate_graph.add_state(gate_animations->lookup("GateOpen"));
-
-	// 6) Construct the RiggedMesh
-	gate_rig = std::make_unique<RiggedMesh>(
-		gate_meshes->buffer, gate_infls->buffer, gate_mesh, *gate_skeleton, &gate_graph);
+	gate_rig = std::make_unique<RiggedMesh>(gate_meshes->buffer, gate_infls->buffer, gate_mesh, *gate_skeleton, &gate_graph);
 
 	// -- populate rigged mesh --
 	// Enemy
@@ -758,7 +746,7 @@ void PlayMode::update(float elapsed) {
 
 				CollisionHits hits = query_world_collisions(
 					new_pos,
-					gate,
+					gate_collider,
 					deer_fence_collider,
 					zoo_fence_near_collider,
 					zoo_fence_far_collider);

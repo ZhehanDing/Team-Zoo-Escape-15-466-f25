@@ -48,6 +48,7 @@ struct PlayMode : Mode {
 	Scene::Transform *final_deer_leg = nullptr;
 	Scene::Transform *sky = nullptr;
 	Scene::Transform *gate = nullptr;
+	Scene::Transform *gate_collider = nullptr;
 	Scene::Transform *deer_fence_collider = nullptr;
 	Scene::Transform *zoo_fence_near_collider = nullptr;
 	Scene::Transform *zoo_fence_far_collider = nullptr;
