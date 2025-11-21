@@ -48,6 +48,8 @@ Forest Cabin: https://www.blenderkit.com/get-blenderkit/a1b23c3e-5e04-4ee5-8dc5-
 Small House: https://www.blenderkit.com/get-blenderkit/6f015242-11e7-45af-a02d-8a17c7b555e6/
 Fish Statue: https://www.blenderkit.com/get-blenderkit/c5430fcc-5e14-44f1-bd82-e4c5d1932408/
 Sculpture of an old angry bear: https://www.blenderkit.com/get-blenderkit/c8113ecf-17d1-44f7-b006-5256ac6547e1/
+Terracotta owl sculpture: https://www.blenderkit.com/get-blenderkit/0ce088d5-c86b-4719-b389-7d6441e5938f/
+Bear Sculpture: https://www.blenderkit.com/get-blenderkit/c4263680-39af-447d-8efb-0efd43cd7077/
 
 This game was built with [NEST](NEST.md).
 

@@ -299,6 +299,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		out.scale = glm::mix(a.scale, b.scale, t);
 		return out;
 	};
+	
 	enemy_graph = AnimationGraph< Skeleton::BoneTransform >(g);
 	enemy_graph.add_state(human_animations->lookup("Walk"));
 	enemy_rig = std::make_unique< RiggedMesh >(
@@ -354,12 +355,13 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	}
 
 	// Gate
-	Mesh const &gate_mesh = gate_meshes->lookup("Circle.001");
+	Mesh const &gate_mesh = gate_meshes->lookup("Gate Mesh");
 	Skeleton const &gate_skel = gate_skeletons->lookup("Controller");
 	gate_skeleton = std::make_unique<Skeleton>(gate_skel);
 	gate_graph = AnimationGraph< Skeleton::BoneTransform>(g); // Reuse the same interpolation function g (already defined above) // TODO: avoid duplicate
 	gate_graph.add_state(gate_animations->lookup("GateOpen"));
 	gate_rig = std::make_unique<RiggedMesh>(gate_meshes->buffer, gate_infls->buffer, gate_mesh, *gate_skeleton, &gate_graph);
+	gate_rig->anim_graph = &gate_graph;
 
 	// -- populate rigged mesh --
 	// Enemy
@@ -709,7 +711,10 @@ void PlayMode::update(float elapsed) {
 	enemy->scale = glm::vec3(1.5f);
 	// enemy_graph.update(elapsed);
 	enemy_rig->update(elapsed);
-	if (gate_rig)  gate_rig->update(elapsed);
+	if (gate_rig)  {
+		gate_graph.update(elapsed);
+		gate_rig->update(elapsed);
+	}
 
 	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 

@@ -129,7 +129,10 @@ GLuint RiggedMesh::make_vao_for_program(GLuint program_) {
 }
 
 void RiggedMesh::update(float elapsed) {
-	if (!anim_graph || program == 0) return;
+	if (!anim_graph || program == 0) {
+		printf("WARNING: RiggedMesh::update() called with !anim_graph: %p or program == 0: %u\n", (void *) anim_graph, program);
+		return;
+	}
 
 	auto pose = skeleton.pose(anim_graph->sample());
 
