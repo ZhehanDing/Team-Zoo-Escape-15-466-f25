@@ -166,6 +166,7 @@ mats = b''
 vertex_count = 0
 
 for obj in bpy.data.objects:
+	print("Considering object '" + obj.name + "'...")
 	if obj.data in to_write:
 		to_write.remove(obj.data)
 	else:
@@ -265,6 +266,8 @@ for obj in bpy.data.objects:
 			if len(reduced_vgs) > 4:
 				reduced_vgs = sorted(reduced_vgs, key=lambda vg : vg.weight, reverse=True)[:4]
 			
+			# print("reduced_vgs: ", [obj.vertex_groups[vg.group].name + " (" + str(vg.weight) + ")" for vg in reduced_vgs])
+			# print("Vertex groups for vertex " + str(vertex.index) + ": " + ", ".join([obj.vertex_groups[vg.group].name + " (" + str(vg.weight) + ")" for vg in vertex.groups]))
 			assert(len(reduced_vgs) > 0)
 			if len(reduced_vgs) == 0:
 				reduced_vgs = [vertex.groups[0]] if len(vertex.groups) > 0 else []
