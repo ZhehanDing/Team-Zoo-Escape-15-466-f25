@@ -213,7 +213,7 @@ Load< SkeletonBuffer > gate_skeletons(LoadTagDefault, []() -> SkeletonBuffer con
 
 Load< AnimationBuffer< Skeleton::BoneTransform > > gate_animations(
     LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
-        return new AnimationBuffer< Skeleton::BoneTransform >(data_path("Gate.anim"));
+        return new AnimationBuffer< Skeleton::BoneTransform >(data_path("Gate.anim"), false);
     });
 
 
@@ -580,8 +580,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		}
 		else if (evt.key.key == SDLK_P)
 		{
-			// TODO: we will have some formal logic for winning condition
-			game_success = true; // this will trigger gate opening in update()
+			// TODO: gate will open when game succeeds
+    		gate_anim_playing = true; 
 			return true;
 		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
@@ -717,7 +717,7 @@ void PlayMode::update(float elapsed) {
 	enemy->scale = glm::vec3(1.5f);
 	// enemy_graph.update(elapsed);
 	enemy_rig->update(elapsed);
-	if (gate_rig && game_success)  {
+	if (gate_rig && gate_anim_playing)  {
 		gate_graph.update(elapsed);
 		gate_rig->update(elapsed);
 	}
