@@ -578,6 +578,12 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			}
 			return true;
 		}
+		else if (evt.key.key == SDLK_P)
+		{
+			// TODO: we will have some formal logic for winning condition
+			game_success = true; // this will trigger gate opening in update()
+			return true;
+		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
 		if (evt.key.key == SDLK_A) {
 			left.pressed = false;
@@ -711,7 +717,7 @@ void PlayMode::update(float elapsed) {
 	enemy->scale = glm::vec3(1.5f);
 	// enemy_graph.update(elapsed);
 	enemy_rig->update(elapsed);
-	if (gate_rig)  {
+	if (gate_rig && game_success)  {
 		gate_graph.update(elapsed);
 		gate_rig->update(elapsed);
 	}
