@@ -354,15 +354,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		make_civilian(center + glm::vec3(x, y, 0.3f));
 	}
 
-	// // Gate
-	// Mesh const &gate_mesh = gate_meshes->lookup("Gate Mesh");
-	// Skeleton const &gate_skel = gate_skeletons->lookup("Controller");
-	// gate_skeleton = std::make_unique<Skeleton>(gate_skel);
-	// gate_graph = AnimationGraph< Skeleton::BoneTransform>(g); // Reuse the same interpolation function g (already defined above) // TODO: avoid duplicate
-	// gate_graph.add_state(gate_animations->lookup("GateOpen"));
-	// gate_rig = std::make_unique<RiggedMesh>(gate_meshes->buffer, gate_infls->buffer, gate_mesh, *gate_skeleton, &gate_graph);
-	// gate_rig->anim_graph = &gate_graph;
-
 	// -- populate rigged mesh --
 	// Enemy
 	scene.drawables.emplace_back(enemy);
@@ -373,16 +364,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	enemy_drawable.pipeline.type = enemy_rig->mesh.type;
 	enemy_drawable.pipeline.start = enemy_rig->mesh.start;
 	enemy_drawable.pipeline.count = enemy_rig->mesh.count;
-
-	// // Gate
-	// scene.drawables.emplace_back(gate);
-	// Scene::Drawable &gate_drawable = scene.drawables.back();
-	// gate_drawable.pipeline = skinning_program_pipeline;
-	// gate_drawable.pipeline.vao =
-	// 	gate_rig->make_vao_for_program(skinning_program->program);
-	// gate_drawable.pipeline.type = gate_rig->mesh.type;
-	// gate_drawable.pipeline.start = gate_rig->mesh.start;
-	// gate_drawable.pipeline.count = gate_rig->mesh.count;
 
 	// get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -582,15 +563,21 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		{
 			// TODO: gate will open when game succeeds
     		gate_anim_playing = true; 
-
 			gate_rot_t = 0.0f;
+			glm::vec3 z_axis(0.0f, 0.0f, 1.0f);
 
 			gate_L_start = gate_L->rotation;
 			gate_R_start = gate_R->rotation;
 
 			float deg = 135.0f;
-			gate_L_end = gate_L_start * glm::angleAxis(glm::radians(deg), glm::vec3(0,0,1));
-			gate_R_end = gate_R_start * glm::angleAxis(glm::radians(-deg), glm::vec3(0,0,1));
+			gate_L_end = gate_L_start * glm::angleAxis(glm::radians(deg), z_axis);
+			gate_R_end = gate_R_start * glm::angleAxis(glm::radians(-deg), z_axis);
+
+			float deg_phase2_L = -7.0f;
+			float deg_phase2_R =  7.0f;
+
+			gate_L_final = gate_L_end * glm::angleAxis(glm::radians(deg_phase2_L), z_axis);
+			gate_R_final = gate_R_end * glm::angleAxis(glm::radians(deg_phase2_R), z_axis);
 			
 			return true;
 		}
@@ -730,14 +717,31 @@ void PlayMode::update(float elapsed) {
 
 	if (gate_anim_playing)  {
 		gate_rot_t += elapsed;
-		float t = gate_rot_t / gate_rot_duration;
-		if (t > 1.0f) t = 1.0f;
+		float percent_played = gate_rot_t / (gate_rot_duration_1 + gate_rot_duration_2);
+		float phase1_end = gate_rot_duration_1 / (gate_rot_duration_1 + gate_rot_duration_2);
 
-		gate_L->rotation = glm::slerp(gate_L_start, gate_L_end, t);
-		gate_R->rotation = glm::slerp(gate_R_start, gate_R_end, t);
+		if (percent_played < phase1_end)
+		{
+			// Open
+			float t1 = percent_played / phase1_end; // 0..1
+			gate_L->rotation = glm::slerp(gate_L_start, gate_L_end, t1);
+			gate_R->rotation = glm::slerp(gate_R_start, gate_R_end, t1);
+		}
+		else
+		{
+			// Swing back a little
+			float t2 = (percent_played - phase1_end) / (1.0f - phase1_end); // 0..1 over second 6 seconds
+			if (t2 > 1.0f)
+				t2 = 1.0f;
 
-		if (t >= 1.0f) {
-			gate_anim_playing = false; // stop after finishing
+			gate_L->rotation = glm::slerp(gate_L_end, gate_L_final, t2);
+			gate_R->rotation = glm::slerp(gate_R_end, gate_R_final, t2);
+		}
+
+		// stop after total duration
+		if (percent_played >= 1.0f)
+		{
+			gate_anim_playing = false;
 		}
 	}
 
