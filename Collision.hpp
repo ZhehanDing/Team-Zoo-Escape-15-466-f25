@@ -5,6 +5,7 @@
 
 struct CollisionHits {
     bool out_of_bounds = false;
+    bool success = false;
 
     bool gate = false;
     bool deer_fence = false;
@@ -15,6 +16,10 @@ struct CollisionHits {
         // printf("CollisionHits: out_of_bounds=%d, gate=%d, deer_fence=%d, zoo_fence_near=%d, zoo_fence_far=%d\n",
         //        out_of_bounds, gate, deer_fence, zoo_fence_near, zoo_fence_far);
         return out_of_bounds || gate || deer_fence || zoo_fence_near || zoo_fence_far;
+    }
+
+    bool escaped() const {
+        return success;
     }
 };
 

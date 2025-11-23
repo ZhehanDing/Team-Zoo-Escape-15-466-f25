@@ -433,6 +433,11 @@ void PlayMode::trigger_game_over() {
 	game_over = true;
 }
 
+void PlayMode::trigger_game_success() {
+	if (game_success) return; // idempotent
+	game_success = true;
+}
+
 PlayMode::~PlayMode() {
 	/*	// NEW: 释放 deer UI 资源
 	if (deer_ui_tex) glDeleteTextures(1, &deer_ui_tex);
@@ -449,6 +454,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		if (evt.key.key == SDLK_ESCAPE) {
 			SDL_SetWindowRelativeMouseMode(Mode::window, false);
 			return true;
+		} else if (game_success) {
+			return false;
 		} else if (evt.key.key == SDLK_A) {
 			left.downs += 1;
 			left.pressed = true;
@@ -465,11 +472,6 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			down.downs += 1;
 			down.pressed = true;
 			return true;
-		// } else if (evt.key.key == SDLK_LCTRL) {
-		// 	if (stalk_charge >= 1.0f && enemy_alive) {
-        //     execution_mode = true;
-        //     return true;
-        // 	}
 		}else if (evt.key.key == SDLK_SPACE) {
 			// Start dash if unlocked, not already dashing, and off cooldown
 			if (dash_skill && !dashing && dash_cooldown_timer <= 0.0f && !game_over) {
@@ -541,10 +543,10 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			}
 			return true;
 		}
-		else if (evt.key.key == SDLK_P)
+		else if (evt.key.key == SDLK_P && !gate_can_open)
 		{
     		gate_anim_playing = true; 
-			game_success = true; // TODO: need a condition for success
+			gate_can_open = true; // TODO: need a condition for this to be true
 
 			gate_rot_t = 0.0f;
 			glm::vec3 z_axis(0.0f, 0.0f, 1.0f);
@@ -763,17 +765,18 @@ void PlayMode::update(float elapsed) {
 
 				CollisionHits hits = query_world_collisions(
 					new_pos,
-					game_success ? nullptr : gate_collider,
+					gate_can_open ? nullptr : gate_collider,
 					deer_fence_collider,
 					zoo_fence_near_collider,
 					zoo_fence_far_collider);
 
-				if (!hits.any())
+				if (hits.escaped())
+				{
+					trigger_game_success();
+				}
+				else if (!hits.any())
 				{
 					player->position = new_pos;
-				}
-				else
-				{
 				}
 			}
 		}
@@ -1322,19 +1325,34 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			1.0f / aspect, 0.0f, 0.0f, 0.0f,
 			0.0f, 1.0f, 0.0f, 0.0f,
 			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
+			0.0f, 0.0f, 0.0f, 1.0f));
 
 		constexpr float H = 0.05f;
-		lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+
+		if (game_success)
+		{
+			lines.draw_text("You escaped the zoo... You are free!",
+							glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+			float ofs = 2.0f / drawable_size.y;
+			lines.draw_text("You escaped the zoo... You are free!",
+							glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		}
+		else
+		{
+			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
+							glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+			float ofs = 2.0f / drawable_size.y;
+			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
+							glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		}
 	}
 	/*
 	if (deer_ui_tex && deer_ui_size.x && deer_ui_size.y) {

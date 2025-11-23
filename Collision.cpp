@@ -17,13 +17,14 @@ namespace {
     const glm::vec3 GATE_HALF              = glm::vec3(2.0f, 9.0f, 3.0f);
     const glm::vec3 DEER_FENCE_HALF        = glm::vec3(34.0f, 39.0f, 3.0f);
     const glm::vec3 ZOO_FENCE_NEAR_HALF    = glm::vec3(60.0f, 60.0f, 3.0f);
-    const glm::vec3 ZOO_FENCE_FAR_HALF    = glm::vec3(60.0f, 44.0f, 3.0f);
+    const glm::vec3 ZOO_FENCE_FAR_HALF    = glm::vec3(60.0f, 49.0f, 3.0f);
 }
 
 namespace { // bounds for the playable area
     constexpr float MIN_Y = -80.0f;
     constexpr float MAX_Y = 90.0f;
     constexpr float MAX_X = 70.0f;
+    constexpr float SUCCESS_X = -150.0f;
 }
 
 // --- Public function used by PlayMode.cpp ---
@@ -38,6 +39,11 @@ CollisionHits query_world_collisions(
 
     if (new_pos.y < MIN_Y || new_pos.y > MAX_Y || new_pos.x > MAX_X) {
         hits.out_of_bounds = true;
+        return hits;
+    }
+
+    if (new_pos.x < SUCCESS_X) {
+        hits.success = true;
         return hits;
     }
 

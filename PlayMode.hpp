@@ -71,6 +71,7 @@ struct PlayMode : Mode {
 	glm::vec3 enemy_mesh_offset = glm::vec3(0.0f);
 
 	// Gate
+	bool gate_can_open = false;
 	bool gate_anim_playing = false;
 	float gate_rot_t = 0.0f;
 	float gate_rot_duration_1 = 6.0f;
@@ -120,10 +121,10 @@ struct PlayMode : Mode {
 	float watched_accum = 0.0f;          // continuous time (seconds) currently being watched
 	float watch_to_gameover = 5.0f;      // threshold (seconds)
 	bool  game_over = false;             // simple game-over latch
+	void trigger_game_over();            // declare handler
 
 	bool game_success = false;
-
-	void trigger_game_over();            // declare handler
+	void trigger_game_success();
 
 	// Enemy collapse animation (after execution)
 	bool enemy_collapsing = false;
