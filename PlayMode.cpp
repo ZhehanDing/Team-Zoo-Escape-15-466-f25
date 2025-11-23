@@ -198,24 +198,6 @@ Load< AnimationBuffer< Skeleton::BoneTransform > > human_animations(LoadTagDefau
 	return new AnimationBuffer< Skeleton::BoneTransform >(data_path("human.anim"));
 });
 
-// // Gate
-// Load< MeshBuffer > gate_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-//     return new MeshBuffer(data_path("gate.pnct"));
-// });
-
-// Load< BoneInfluenceBuffer > gate_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
-//     return new BoneInfluenceBuffer(data_path("Gate.infl"));
-// });
-
-// Load< SkeletonBuffer > gate_skeletons(LoadTagDefault, []() -> SkeletonBuffer const * {
-//     return new SkeletonBuffer(data_path("Gate.skel"));
-// });
-
-// Load< AnimationBuffer< Skeleton::BoneTransform > > gate_animations(
-//     LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
-//         return new AnimationBuffer< Skeleton::BoneTransform >(data_path("Gate.anim"), false);
-//     });
-
 
 static const char *civilian_mesh_names[] = {
 	"civilian_base",
@@ -561,8 +543,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		}
 		else if (evt.key.key == SDLK_P)
 		{
-			// TODO: gate will open when game succeeds
     		gate_anim_playing = true; 
+			game_success = true; // TODO: need a condition for success
+
 			gate_rot_t = 0.0f;
 			glm::vec3 z_axis(0.0f, 0.0f, 1.0f);
 
@@ -780,7 +763,7 @@ void PlayMode::update(float elapsed) {
 
 				CollisionHits hits = query_world_collisions(
 					new_pos,
-					gate_collider,
+					game_success ? nullptr : gate_collider,
 					deer_fence_collider,
 					zoo_fence_near_collider,
 					zoo_fence_far_collider);

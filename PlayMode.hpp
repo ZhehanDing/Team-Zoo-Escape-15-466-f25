@@ -121,6 +121,8 @@ struct PlayMode : Mode {
 	float watch_to_gameover = 5.0f;      // threshold (seconds)
 	bool  game_over = false;             // simple game-over latch
 
+	bool game_success = false;
+
 	void trigger_game_over();            // declare handler
 
 	// Enemy collapse animation (after execution)
