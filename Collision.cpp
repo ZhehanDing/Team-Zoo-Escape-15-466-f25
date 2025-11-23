@@ -11,7 +11,6 @@ bool check_collision(
            (std::abs(posA.z - posB.z) <= (halfA.z + halfB.z));
 }
 
-
 // --- Shared half-extents, created once ---
 namespace {
     const glm::vec3 PLAYER_HALF            = glm::vec3(1.0f, 1.0f, 1.0f);

@@ -48,6 +48,8 @@ struct PlayMode : Mode {
 	Scene::Transform *final_deer_leg = nullptr;
 	Scene::Transform *sky = nullptr;
 	Scene::Transform *gate = nullptr;
+	Scene::Transform *gate_L = nullptr;
+	Scene::Transform *gate_R = nullptr;
 	Scene::Transform *gate_collider = nullptr;
 	Scene::Transform *deer_fence_collider = nullptr;
 	Scene::Transform *zoo_fence_near_collider = nullptr;
@@ -69,20 +71,25 @@ struct PlayMode : Mode {
 	glm::vec3 enemy_mesh_offset = glm::vec3(0.0f);
 
 	// Gate
-	std::unique_ptr< Skeleton > gate_skeleton;
-	AnimationGraph< Skeleton::BoneTransform > gate_graph =
-    AnimationGraph< Skeleton::BoneTransform >(
-        [](Skeleton::BoneTransform const &a,
-           Skeleton::BoneTransform const &b,
-           float t) {
-            Skeleton::BoneTransform out;
-            out.position = glm::mix(a.position, b.position, t);
-            out.rotation = glm::normalize(glm::slerp(a.rotation, b.rotation, t));
-            out.scale    = glm::mix(a.scale, b.scale, t);
-            return out;
-        });
-	std::unique_ptr< RiggedMesh > gate_rig;
+	// std::unique_ptr< Skeleton > gate_skeleton;
+	// AnimationGraph< Skeleton::BoneTransform > gate_graph =
+    // AnimationGraph< Skeleton::BoneTransform >(
+    //     [](Skeleton::BoneTransform const &a,
+    //        Skeleton::BoneTransform const &b,
+    //        float t) {
+    //         Skeleton::BoneTransform out;
+    //         out.position = glm::mix(a.position, b.position, t);
+    //         out.rotation = glm::normalize(glm::slerp(a.rotation, b.rotation, t));
+    //         out.scale    = glm::mix(a.scale, b.scale, t);
+    //         return out;
+    //     });
+	// std::unique_ptr< RiggedMesh > gate_rig;
 	bool gate_anim_playing = false;
+	float gate_rot_t = 0.0f;
+	float gate_rot_duration = 6.0f;
+
+	glm::quat gate_L_start, gate_L_end;
+	glm::quat gate_R_start, gate_R_end;
 
 	//camera:
 	Camera *cam;

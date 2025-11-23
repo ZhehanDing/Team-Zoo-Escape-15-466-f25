@@ -198,23 +198,23 @@ Load< AnimationBuffer< Skeleton::BoneTransform > > human_animations(LoadTagDefau
 	return new AnimationBuffer< Skeleton::BoneTransform >(data_path("human.anim"));
 });
 
-// Gate
-Load< MeshBuffer > gate_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-    return new MeshBuffer(data_path("gate.pnct"));
-});
+// // Gate
+// Load< MeshBuffer > gate_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+//     return new MeshBuffer(data_path("gate.pnct"));
+// });
 
-Load< BoneInfluenceBuffer > gate_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
-    return new BoneInfluenceBuffer(data_path("Gate.infl"));
-});
+// Load< BoneInfluenceBuffer > gate_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
+//     return new BoneInfluenceBuffer(data_path("Gate.infl"));
+// });
 
-Load< SkeletonBuffer > gate_skeletons(LoadTagDefault, []() -> SkeletonBuffer const * {
-    return new SkeletonBuffer(data_path("Gate.skel"));
-});
+// Load< SkeletonBuffer > gate_skeletons(LoadTagDefault, []() -> SkeletonBuffer const * {
+//     return new SkeletonBuffer(data_path("Gate.skel"));
+// });
 
-Load< AnimationBuffer< Skeleton::BoneTransform > > gate_animations(
-    LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
-        return new AnimationBuffer< Skeleton::BoneTransform >(data_path("Gate.anim"), false);
-    });
+// Load< AnimationBuffer< Skeleton::BoneTransform > > gate_animations(
+//     LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
+//         return new AnimationBuffer< Skeleton::BoneTransform >(data_path("Gate.anim"), false);
+//     });
 
 
 static const char *civilian_mesh_names[] = {
@@ -249,6 +249,8 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		}
 		if (transform.name == "Sky") sky = &transform;
 		if (transform.name == "Gate") gate = &transform;
+		if (transform.name == "Gate_L") gate_L = &transform;
+		if (transform.name == "Gate_R") gate_R = &transform;
 		if (transform.name == "Collider_Gate") gate_collider = &transform;
 		if (transform.name == "Collider_Deer Fence") deer_fence_collider = &transform;
 		if (transform.name == "Collider_Zoo Fence Near") zoo_fence_near_collider = &transform;
@@ -260,10 +262,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		// 	cylinders.push_back(&transform);
 		// 	// printf("Found tree: %s\n", transform.name.c_str());
 		// }
-		// if (transform.name.rfind("Collider", 0) == 0)
-		// {
-		// 	colliders.push_back(&transform);
-		// }
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
@@ -271,6 +269,8 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
 	if (gate == nullptr) throw std::runtime_error("gate not found.");
+	if (gate_L == nullptr) throw std::runtime_error("gate_L not found.");
+	if (gate_R == nullptr) throw std::runtime_error("gate_R not found.");
 	if (gate_collider == nullptr) throw std::runtime_error("gate_collider not found.");
 	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
 	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
@@ -354,14 +354,14 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		make_civilian(center + glm::vec3(x, y, 0.3f));
 	}
 
-	// Gate
-	Mesh const &gate_mesh = gate_meshes->lookup("Gate Mesh");
-	Skeleton const &gate_skel = gate_skeletons->lookup("Controller");
-	gate_skeleton = std::make_unique<Skeleton>(gate_skel);
-	gate_graph = AnimationGraph< Skeleton::BoneTransform>(g); // Reuse the same interpolation function g (already defined above) // TODO: avoid duplicate
-	gate_graph.add_state(gate_animations->lookup("GateOpen"));
-	gate_rig = std::make_unique<RiggedMesh>(gate_meshes->buffer, gate_infls->buffer, gate_mesh, *gate_skeleton, &gate_graph);
-	gate_rig->anim_graph = &gate_graph;
+	// // Gate
+	// Mesh const &gate_mesh = gate_meshes->lookup("Gate Mesh");
+	// Skeleton const &gate_skel = gate_skeletons->lookup("Controller");
+	// gate_skeleton = std::make_unique<Skeleton>(gate_skel);
+	// gate_graph = AnimationGraph< Skeleton::BoneTransform>(g); // Reuse the same interpolation function g (already defined above) // TODO: avoid duplicate
+	// gate_graph.add_state(gate_animations->lookup("GateOpen"));
+	// gate_rig = std::make_unique<RiggedMesh>(gate_meshes->buffer, gate_infls->buffer, gate_mesh, *gate_skeleton, &gate_graph);
+	// gate_rig->anim_graph = &gate_graph;
 
 	// -- populate rigged mesh --
 	// Enemy
@@ -374,15 +374,15 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	enemy_drawable.pipeline.start = enemy_rig->mesh.start;
 	enemy_drawable.pipeline.count = enemy_rig->mesh.count;
 
-	// Gate
-	scene.drawables.emplace_back(gate);
-	Scene::Drawable &gate_drawable = scene.drawables.back();
-	gate_drawable.pipeline = skinning_program_pipeline;
-	gate_drawable.pipeline.vao =
-		gate_rig->make_vao_for_program(skinning_program->program);
-	gate_drawable.pipeline.type = gate_rig->mesh.type;
-	gate_drawable.pipeline.start = gate_rig->mesh.start;
-	gate_drawable.pipeline.count = gate_rig->mesh.count;
+	// // Gate
+	// scene.drawables.emplace_back(gate);
+	// Scene::Drawable &gate_drawable = scene.drawables.back();
+	// gate_drawable.pipeline = skinning_program_pipeline;
+	// gate_drawable.pipeline.vao =
+	// 	gate_rig->make_vao_for_program(skinning_program->program);
+	// gate_drawable.pipeline.type = gate_rig->mesh.type;
+	// gate_drawable.pipeline.start = gate_rig->mesh.start;
+	// gate_drawable.pipeline.count = gate_rig->mesh.count;
 
 	// get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -582,6 +582,16 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		{
 			// TODO: gate will open when game succeeds
     		gate_anim_playing = true; 
+
+			gate_rot_t = 0.0f;
+
+			gate_L_start = gate_L->rotation;
+			gate_R_start = gate_R->rotation;
+
+			float deg = 135.0f;
+			gate_L_end = gate_L_start * glm::angleAxis(glm::radians(deg), glm::vec3(0,0,1));
+			gate_R_end = gate_R_start * glm::angleAxis(glm::radians(-deg), glm::vec3(0,0,1));
+			
 			return true;
 		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
@@ -717,9 +727,18 @@ void PlayMode::update(float elapsed) {
 	enemy->scale = glm::vec3(1.5f);
 	// enemy_graph.update(elapsed);
 	enemy_rig->update(elapsed);
-	if (gate_rig && gate_anim_playing)  {
-		gate_graph.update(elapsed);
-		gate_rig->update(elapsed);
+
+	if (gate_anim_playing)  {
+		gate_rot_t += elapsed;
+		float t = gate_rot_t / gate_rot_duration;
+		if (t > 1.0f) t = 1.0f;
+
+		gate_L->rotation = glm::slerp(gate_L_start, gate_L_end, t);
+		gate_R->rotation = glm::slerp(gate_R_start, gate_R_end, t);
+
+		if (t >= 1.0f) {
+			gate_anim_playing = false; // stop after finishing
+		}
 	}
 
 	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
