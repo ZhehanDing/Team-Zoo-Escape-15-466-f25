@@ -44,6 +44,8 @@ const std::vector<NamedTexture> named_textures = {
     // Objects
     {"Fence Brick", "textures/BrickWall001a_Color.png"},
     {"Street lamp", "textures/old lamp post_BaseColor.png"},
+    {"Окружность", "textures/steel.png"},
+    {"Цилиндр", "textures/steel.png"},
     {"Cobblestone road", "textures/road_C_fix.png"},
     {"Park Bench", "textures/Park Bench_BaseColor.1001.png"},
     {"Fence_array", "textures/steel.png"},
@@ -89,6 +91,11 @@ const std::vector<NamedTexture> named_textures = {
     {"Small House Terra", "textures/small_house_terra.png"},
     {"Small House Main", "textures/small_house_main.png"},
     {"Small House Tower", "textures/small_house_tower_2.png"},
+    // Statues
+    {"Angry Bear", "textures/angry-bear.png"},
+    {"Bear Sculpture", "textures/BearStatue.png"},
+    {"Fish Statue", "textures/rock_1.png"},
+    {"Terracotta owl", "textures/Owl_Color.png"},
 };
 
 Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> const *
