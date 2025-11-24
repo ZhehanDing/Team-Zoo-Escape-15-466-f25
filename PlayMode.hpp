@@ -101,7 +101,7 @@ struct PlayMode : Mode {
 	float watched_grace_timer = 0.0f; // countdown
 	//game over set
 	float watched_accum = 0.0f;          // continuous time (seconds) currently being watched
-	float watch_to_gameover = 5.0f;      // threshold (seconds)
+	float watch_to_gameover = 3.0f;      // threshold (seconds)
 	bool  game_over = false;             // simple game-over latch
 
 	void trigger_game_over();            // declare handler
@@ -139,4 +139,7 @@ struct PlayMode : Mode {
 	std::vector<int> attraction_ids = {1, 2, 3, 4};
 	glm::vec3 pull_target = glm::vec3(0.0f);
 	bool being_pulled = false;
+	// NEW: Set civilian is currently watching the player
+	//2025/11/22 update
+	Civilian *watching_civilian = nullptr;
 };

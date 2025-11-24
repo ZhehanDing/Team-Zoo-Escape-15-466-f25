@@ -1,13 +1,13 @@
 
-BLENDER="C:\Program Files\Blender Foundation\Blender 4.5.2\blender.exe"
+BLENDER="F:\steam game\steamapps\common\Blender\blender.exe"
 DIST=../dist
 
 all : \
-    $(DIST)/hexapod.pnct \
-    $(DIST)/hexapod.scene \
+    $(DIST)/zoo_nolink.pnct \
+    $(DIST)/zoo_nolink.scene \
 
-$(DIST)/hexapod.scene : hexapod.blend export-scene.py
-    $(BLENDER) --background --python export-scene.py -- "hexapod.blend:Main" "$(DIST)/hexapod.scene"
+$(DIST)/zoo_nolink.scene : zoo_nolink.blend export-scene.py
+    $(BLENDER) --background --python export-scene.py -- "zoo_nolink.blend:Main" "$(DIST)/zoo_nolink.scene"
 
-$(DIST)/hexapod.pnct : hexapod.blend export-meshes.py
-    $(BLENDER) --background --python export-meshes.py -- "hexapod.blend:Main" "$(DIST)/hexapod.pnct" 
+$(DIST)/zoo_nolink.pnct : zoo_nolink.blend export-meshes.py
+    $(BLENDER) --background --python export-meshes.py -- "zoo_nolink.blend:Main" "$(DIST)/zoo_nolink.pnct" 

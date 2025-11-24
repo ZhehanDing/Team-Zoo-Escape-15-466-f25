@@ -3,11 +3,11 @@
 #include <glm/gtc/quaternion.hpp>
 #include <random>
 #include <memory>
+#include <cmath>        // 确保有 std::atan2 / std::exp
 #include "Scene.hpp"
 #include "Skeleton.hpp"
 #include "RiggedMesh.hpp"
 #include "Animation.hpp"
-
 struct Civilian {
 	Scene::Transform *transform = nullptr;
 	std::unique_ptr< Skeleton > skel;
@@ -33,13 +33,26 @@ struct Civilian {
 	glm::vec3 pull_target{0.0f, 0.0f, 0.0f};
 	bool being_pulled = false;
 	float pull_speed = 3.0f; // faster than normal wandering
+	// NEW: this civilian is currently watching the player (stand + rotate)
+	//2025/11/22 update
+	bool watching_player = false;
 };
 
 inline float rand(std::mt19937 &rng, float min, float max) {
 	return min + (max - min) * (rng() >> 8) * (1.0f / 16777216.0f);
 }
 
+
 inline void civilian_update(Civilian &c, float elapsed) {
+	// NEW: if this civilian is in watch mode, don't move them here
+	//2025/11/22 update
+	if (c.watching_player) {
+		c.velocity = glm::vec2(0.0f);
+		c.move_timer = 0.0f;
+		c.pause_timer = 0.0f;
+		return; // PlayMode will handle rotation toward player
+	}
+
 	if (c.being_pulled) {
 		glm::vec3 pos3 = c.transform->position;
 		glm::vec2 pos(pos3.x, pos3.y);
@@ -123,6 +136,10 @@ inline void civilian_update(Civilian &c, float elapsed) {
 	}
 }
 
+//11/23 update/Alex Ding
+
+
+
 inline void civilian_avoid_obstacles(std::vector< Civilian > &civilians, const std::vector< std::pair< Scene::Transform *, float > > &obstacles) {
 	// For each civilian, check against each obstacle
     for (auto &c : civilians) {
@@ -148,6 +165,7 @@ inline void civilian_avoid_obstacles(std::vector< Civilian > &civilians, const s
 		}
 	}
 }
+
 
 inline void resolve_collisions(std::vector< Civilian > &civilians) {
 	// For each civilian pair, check if they overlap
