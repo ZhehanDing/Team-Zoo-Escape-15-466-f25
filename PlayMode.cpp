@@ -6,13 +6,10 @@
 #include "LightMeshes.hpp"
 #include "CopyToScreenProgram.hpp"
 #include "ParticleProgram.hpp"
-<<<<<<< HEAD
 #include <memory>
-=======
 #include "Textures.hpp"
 #include "Collision.hpp"
 
->>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
 #include "Animation.hpp"
 #include "DrawLines.hpp"
 #include "Load.hpp"
@@ -70,12 +67,6 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		drawable.pipeline.count = mesh.count;
 
 		float roughness = 1.0f;
-<<<<<<< HEAD
-		if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
-			roughness = (transform->position.y + 10.0f) / 18.0f;
-		}
-		drawable.pipeline.set_uniforms = [roughness](){
-=======
 		// if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
 		// 	roughness = (transform->position.y + 10.0f) / 18.0f;
 		// }
@@ -99,19 +90,13 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		bool is_sky = (transform->name == "Sky");
 		drawable.pipeline.set_uniforms = [roughness, is_sky]()
 		{
->>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
 			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
 			glUniform1i(basic_material_deferred_object_program->SKY_MODE_int,
 						is_sky ? 1 : 0);
 		};
 		});
 
-<<<<<<< HEAD
-	return ret;
-});
-=======
 		return ret; });
->>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
 
 // Helper: maintain a framebuffer to hold rendered geometry
 struct FB {
@@ -471,17 +456,14 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		if (evt.key.key == SDLK_ESCAPE) {
 			SDL_SetWindowRelativeMouseMode(Mode::window, false);
 			return true;
-<<<<<<< HEAD
 		}else if (evt.key.key == SDLK_R) {
 			// restart the game with a fresh PlayMode
 			if (game_over) {
 				Mode::set_current(std::make_shared< PlayMode >());
 			}
 			return true;
-=======
 		} else if (game_success) {
 			return false;
->>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
 		} else if (evt.key.key == SDLK_A) {
 			left.downs += 1;
 			left.pressed = true;
@@ -1256,11 +1238,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		glm::vec4 c_clip  = clip_from_world * glm::vec4(c_world, 1.0f);
 
 		if (c_clip.w > 0.0f) {
-<<<<<<< HEAD
-			glm::vec3 c_ndc = glm::vec3(c_clip) / c_clip.w;
-=======
 			// glm::vec3 c_ndc = glm::vec3(c_clip) / c_clip.w;
->>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
 			// ... existing draw_lines / crosshair overlay code, just driven by c_ndc instead of enemy
 		}
 	}
