@@ -55,6 +55,10 @@ struct RiggedMesh {
 	const Mesh &mesh;
 	const Skeleton &skeleton;
 	AnimationGraph< Skeleton::BoneTransform > *anim_graph = nullptr;
+	GLuint program = 0;
+	GLuint vbo_vert = 0;
+	GLuint vbo_bone = 0;
+	GLuint pose_ubo = 0;
 
 	// source is MeshBuffer::buffer where the mesh data exists for purpose of vao creation
 	RiggedMesh(
@@ -84,12 +88,10 @@ struct RiggedMesh {
 	//void bind(std::vector < BoneInfluence > infls);
 	void update(float elapsed);
 
+	void bind_pose_ubo() const;
+
 	//glm::mat4 mesh_from_world;
 	//glm::mat4 world_from_mesh;
 
-	GLuint program = 0;
-
-	GLuint vbo_vert = 0;
-	GLuint vbo_bone = 0;
 	GLuint make_vao_for_program(GLuint program);
 };

@@ -178,4 +178,3 @@ SkinningProgram::~SkinningProgram() {
 	glDeleteProgram(program);
 	program = 0;
 }
-

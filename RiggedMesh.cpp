@@ -136,7 +136,36 @@ void RiggedMesh::update(float elapsed) {
 
 	auto pose = skeleton.pose(anim_graph->sample());
 
-	glUseProgram(program);
-	glUniformMatrix4x3fv(glGetUniformLocation(program, "POSE"), (GLsizei) pose.size(), GL_FALSE, glm::value_ptr(pose[0]));
-	glUseProgram(0);
+	constexpr size_t MAX_BONES = 256;
+
+	std::vector< glm::mat4 > pose4;
+	pose4.reserve(pose.size());
+	for (size_t i = 0; i < pose.size(); ++i) {
+		glm::mat4x3 m3 = pose[i];
+		glm::mat4 m4(1.0f);
+		for (int c = 0; c < 4; ++c) {
+			glm::vec3 col = m3[c];
+			m4[c] = glm::vec4(col, (c == 3) ? 1.0f : 0.0f);
+		}
+		pose4.push_back(m4);
+	}
+
+	if (pose_ubo == 0) {
+		glGenBuffers(1, &pose_ubo);
+		glBindBuffer(GL_UNIFORM_BUFFER, pose_ubo);
+		glBufferData(GL_UNIFORM_BUFFER, MAX_BONES * sizeof(glm::mat4), nullptr, GL_DYNAMIC_DRAW);
+		glBindBuffer(GL_UNIFORM_BUFFER, 0);
+	}
+
+	glBindBuffer(GL_UNIFORM_BUFFER, pose_ubo);
+	if (!pose4.empty()) {
+		glBufferSubData(GL_UNIFORM_BUFFER, 0, pose4.size() * sizeof(glm::mat4), glm::value_ptr(pose4[0]));
+	}
+	glBindBuffer(GL_UNIFORM_BUFFER, 0);
+}
+
+void RiggedMesh::bind_pose_ubo() const {
+	if (pose_ubo == 0) return;
+	constexpr GLuint POSE_BINDING = 3;
+	glBindBufferBase(GL_UNIFORM_BUFFER, POSE_BINDING, pose_ubo);
 }

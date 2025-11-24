@@ -145,6 +145,9 @@ sorted_bones = topological_sort(filter_by_substring("DEF", bpy.data.armatures[0]
 
 bone_indices = { sorted_bones[i].name : i for i in range(len(sorted_bones)) }
 
+# force armature (including deform bones) into rest position
+bpy.data.armatures[0].pose_position = 'REST'
+
 #data contains vertex, normal, color, and texture data from the meshes:
 data = []
 

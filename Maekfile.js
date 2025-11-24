@@ -37,6 +37,7 @@ if (maek.OS === "windows") {
 		`/I${NEST_LIBS}/harfbuzz/include`,
 		`/I${NEST_LIBS}/freetype/include`,
 		//#disable a few warnings:
+		//`/fsanitize=address`,
 		`/wd4146`, //-1U is still unsigned
 		`/wd4297`, //unforunately SDLmain is nothrow
 		`/wd4100`, //unreferenced formal parameter
@@ -157,6 +158,7 @@ const game_names = [
 	maek.CPP('Collision.cpp'),
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('main.cpp'),
+	maek.CPP('SkinningLitColorTextureProgram.cpp'),
 	maek.CPP('SkinningProgram.cpp'),
 	maek.CPP('LitColorTextureProgram.cpp'),
 	maek.CPP('ParticleProgram.cpp'),

@@ -16,6 +16,7 @@
 #include "Mesh.hpp"
 #include "RiggedMesh.hpp"
 #include "Skeleton.hpp"
+#include "SkinningLitColorTextureProgram.hpp"
 #include "SkinningProgram.hpp"
 #include "gl_errors.hpp"
 #include "load_save_png.hpp"
@@ -25,6 +26,9 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <random>
+#include <map>
+#include <functional>
+#include <memory>
 
 GLuint zoo_for_basic_material_deferred_object = 0;
 GLuint light_for_basic_material_deferred_light = 0;
@@ -181,44 +185,158 @@ struct FB {
 	}
 } fb;
 
-// -- Meshes, skeletons, animations, and bone influences --
-// Human
-Load< MeshBuffer > human_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	return new MeshBuffer(data_path("human.pnct"));
+Load< MeshBuffer > enemy_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	return new MeshBuffer(data_path("enemy.pnct"));
 });
 
-Load< BoneInfluenceBuffer > human_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
-	return new BoneInfluenceBuffer(data_path("human.infl"));
+Load< BoneInfluenceBuffer > enemy_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
+	return new BoneInfluenceBuffer(data_path("enemy.infl"));
 });
 
-Load< SkeletonBuffer > human_skeletons(LoadTagDefault, []() -> SkeletonBuffer const * {
-	return new SkeletonBuffer(data_path("human.skel"));
+Load<SkeletonBuffer> enemy_skeletons(LoadTagDefault, []() {
+    return new SkeletonBuffer(data_path("enemy.skel"));
 });
 
 Load< AnimationBuffer< Skeleton::BoneTransform > > human_animations(LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
 	return new AnimationBuffer< Skeleton::BoneTransform >(data_path("human.anim"));
 });
 
+static uint64_t seed_counter = 0;
 
-static const char *civilian_mesh_names[] = {
-	"civilian_base",
-	"bob01",
-	"eyebrow001",
-	"eyelashes01",
-	"high-poly",
-	"male_casualsuit06",
-	"shoes_monk_strap_female",
-	"teeth_base",
-	"tongue01",
-};
+void make_civilian(
+	PlayMode *playmode,
+	const std::string &civilian_name,
+	const glm::vec3 &location
+) {
+	static std::map< std::string, std::unique_ptr< MeshBuffer > > mesh_cache;
+	static std::map< std::string, std::unique_ptr< BoneInfluenceBuffer > > infl_cache;
+	static std::map< std::string, std::unique_ptr< SkeletonBuffer > > skeleton_cache;
+	mesh_cache[civilian_name] = std::make_unique< MeshBuffer >(data_path(civilian_name + ".pnct"));
+	infl_cache[civilian_name] = std::make_unique< BoneInfluenceBuffer >(data_path(civilian_name + ".infl"));
+	skeleton_cache[civilian_name] = std::make_unique< SkeletonBuffer >(data_path(civilian_name + ".skel"));
 
-GLuint civilian_for_basic_material_deferred_object = 0;
-Load< MeshBuffer > civilian_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("civilian.pnct"));
-	civilian_for_basic_material_deferred_object =
-		ret->make_vao_for_program(basic_material_deferred_object_program->program);
-	return ret;
-});
+	auto &mesh_buffer = mesh_cache[civilian_name];
+	auto &infl_buffer = infl_cache[civilian_name];
+	auto &skeleton_buffer = skeleton_cache[civilian_name];
+
+	Skeleton const &human_skel = skeleton_buffer->lookup("Human.rigify");
+
+	auto g = [](const Skeleton::BoneTransform &a,
+				const Skeleton::BoneTransform &b,
+				float t) {
+		Skeleton::BoneTransform out;
+		out.position = glm::mix(a.position, b.position, t);
+		out.rotation = glm::normalize(glm::slerp(a.rotation, b.rotation, t));
+		out.scale = glm::mix(a.scale, b.scale, t);
+		return out;
+	};
+
+	playmode->scene.transforms.emplace_back();
+	Scene::Transform *transform = &playmode->scene.transforms.back();
+	transform->position = location;
+	transform->rotation = glm::quat(1, 0, 0, 0);
+	transform->scale = glm::vec3(1.1f);
+
+	Civilian c;
+	c.transform = transform;
+	c.base_rotation = transform->rotation;
+	c.start_pos = glm::vec2(location.x, location.y);
+	c.skel = std::make_unique< Skeleton >(human_skel);
+	c.anim_buffer = std::make_unique< AnimationBuffer< Skeleton::BoneTransform > >(data_path("human.anim"));
+		
+	c.graph = AnimationGraph< Skeleton::BoneTransform >(g);
+	
+	c.graph.add_state(c.anim_buffer->lookup("Stand"));
+	c.graph.add_state(c.anim_buffer->lookup("Walk"));
+	c.graph.add_state(c.anim_buffer->lookup("Run"));
+	c.graph.add_state(c.anim_buffer->lookup("WalkToRun"));
+	c.graph.add_state(c.anim_buffer->lookup("RunToWalk"));
+	c.graph.add_state(c.anim_buffer->lookup("WalkToStand"));
+	c.graph.add_state(c.anim_buffer->lookup("StandToWalk"));
+	
+	c.rng.seed(std::random_device{}() ^ (++seed_counter));
+
+	std::vector<std::string> renderable_mesh_names;
+	for (const auto& mesh_pair : mesh_buffer->meshes) {
+		const std::string& mesh_name = mesh_pair.first;
+		if (mesh_name.find("WGT-") == 0) continue;
+		renderable_mesh_names.push_back(mesh_name);
+	}
+	c.rigs.clear();
+	c.rigs.reserve(renderable_mesh_names.size());
+	
+	for (const std::string& mesh_name : renderable_mesh_names) {
+		const Mesh& mesh = mesh_buffer->lookup(mesh_name);
+		c.rigs.emplace_back(std::make_unique< RiggedMesh >(
+			mesh_buffer->buffer, infl_buffer->buffer, mesh, *c.skel, &c.graph));
+		c.rigs.back()->anim_graph = &c.graph;
+		
+		playmode->scene.drawables.emplace_back(transform);
+		Scene::Drawable &drawable = playmode->scene.drawables.back();
+		playmode->civilian_drawables.push_back(&drawable);
+		
+		drawable.pipeline = skinning_lit_color_texture_program_pipeline;
+		drawable.pipeline.vao = c.rigs.back()->make_vao_for_program(skinning_lit_color_texture_program->program);
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;
+		
+		bool found_texture = false;
+		
+		std::string texture_match_name = mesh_name;
+		if (mesh_name == "base") {
+			std::string civ_num = "";
+			size_t underscore_pos = civilian_name.find('_');
+			if (underscore_pos != std::string::npos && underscore_pos + 1 < civilian_name.length()) {
+				civ_num = civilian_name.substr(underscore_pos + 1);
+				texture_match_name = "base_" + civ_num;
+			}
+		}
+		
+		if (texture_match_name != mesh_name) {
+			for (size_t i = 0; i < named_textures.size(); ++i) {
+				if (texture_match_name == named_textures[i].prefix) {
+					if (i < textures->size()) {
+						GLuint tex_id = (*textures)[i];
+						if (tex_id != 0) {
+							drawable.pipeline.textures[0].texture = tex_id;
+							drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+							found_texture = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+		
+		if (!found_texture) {
+			for (size_t i = 0; i < named_textures.size(); ++i) {
+				if (mesh_name == named_textures[i].prefix || 
+				    mesh_name.rfind(named_textures[i].prefix, 0) == 0) {
+					if (i < textures->size()) {
+						GLuint tex_id = (*textures)[i];
+						if (tex_id != 0) {
+							drawable.pipeline.textures[0].texture = tex_id;
+							drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+							found_texture = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+		if (!found_texture) {
+			std::cout << "No texture found for civilian '" << civilian_name << "' mesh '" << mesh_name << std::endl;
+		}
+		
+		auto rig_ptr = c.rigs.back().get();
+		drawable.pipeline.set_uniforms = [rig_ptr]() {
+			rig_ptr->bind_pose_ubo();
+		};
+	}
+	
+	playmode->civilians.emplace_back(std::move(c));
+}
 
 PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
@@ -259,20 +377,15 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
 	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
 
+	scene.drawables.remove_if([this](Scene::Drawable const &drawable) {
+		return drawable.transform == enemy;
+	});
+
 	player_base_rotation = player->rotation;
 
-	// for (auto &d : scene.drawables) {
-	// 	if (d.transform == enemy) {
-	// 		d.pipeline.count = 0; // hide old enemy mesh
-	// 	}
-	// }
+	Skeleton const &enemy_skel = enemy_skeletons->lookup("Human.rigify");
 
-	// -- Handle skeleton --
-	// Enemy
-	Mesh const &human_mesh = human_meshes->lookup("base.001");
-	Skeleton const &human_skel = human_skeletons->lookup("Human.rigify");
-
-	enemy_skeleton = std::make_unique< Skeleton >(human_skel);
+	enemy_skeleton = std::make_unique< Skeleton >(enemy_skel);
 	auto g = [](const Skeleton::BoneTransform &a,
 				const Skeleton::BoneTransform &b,
 				float t) {
@@ -284,69 +397,169 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	};
 	
 	enemy_graph = AnimationGraph< Skeleton::BoneTransform >(g);
+	enemy_graph.add_state(human_animations->lookup("Stand"));
 	enemy_graph.add_state(human_animations->lookup("Walk"));
-	enemy_rig = std::make_unique< RiggedMesh >(
-		human_meshes->buffer, human_infls->buffer, human_mesh, *enemy_skeleton, &enemy_graph);
+	enemy_graph.add_state(human_animations->lookup("StandToWalk"));
+	enemy_graph.add_state(human_animations->lookup("WalkToStand"));
+	
+	// Start with Stand animation
+	auto stand_it = enemy_graph.states.find("Stand");
+	if (stand_it != enemy_graph.states.end()) {
+		enemy_graph.current_state = &stand_it->second;
+		enemy_graph.playback = 0.0f;
+		enemy_graph.keyframe_index = 0;
+	}
+	enemy_state = ENEMY_STAND;
+	
+	std::vector<std::string> renderable_mesh_names;
+	for (const auto& mesh_pair : enemy_meshes->meshes) {
+		const std::string& mesh_name = mesh_pair.first;
+		if (mesh_name.find("WGT-") == 0) continue;
+		renderable_mesh_names.push_back(mesh_name);
+	}
+	enemy_rigs.clear();
+	enemy_rigs.reserve(renderable_mesh_names.size());
+	enemy_drawables.clear();
+	enemy_drawables.reserve(renderable_mesh_names.size());
+	
+	for (const std::string& mesh_name : renderable_mesh_names) {
+		const Mesh& mesh = enemy_meshes->lookup(mesh_name);
+		enemy_rigs.emplace_back(std::make_unique< RiggedMesh >(
+			enemy_meshes->buffer, enemy_infls->buffer, mesh, *enemy_skeleton, &enemy_graph));
+		enemy_rigs.back()->anim_graph = &enemy_graph;
 
-	auto make_civilian = [&](const glm::vec3 &location) {
-		scene.transforms.emplace_back();
-		Scene::Transform *transform = &scene.transforms.back();
-		transform->position = location;
-		transform->rotation = glm::quat(1, 0, 0, 0);
-		transform->scale = glm::vec3(1.1f);
-
-		for (const char *mesh_name : civilian_mesh_names) {
-			Mesh const *mesh = &civilian_meshes->lookup(mesh_name);
-			scene.drawables.emplace_back(transform);
-			Scene::Drawable &dr = scene.drawables.back();
-			dr.pipeline = basic_material_deferred_object_program_pipeline;
-			dr.pipeline.vao = civilian_for_basic_material_deferred_object;
-			dr.pipeline.type = mesh->type;
-			dr.pipeline.start = mesh->start;
-			dr.pipeline.count = mesh->count;
+		scene.drawables.emplace_back(enemy);
+		Scene::Drawable &drawable = scene.drawables.back();
+		enemy_drawables.push_back(&drawable);
+		drawable.pipeline = skinning_lit_color_texture_program_pipeline;
+		drawable.pipeline.vao = enemy_rigs.back()->make_vao_for_program(skinning_lit_color_texture_program->program);
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;
+		
+		bool found_texture = false;
+		for (size_t i = 0; i < named_textures.size(); ++i) {
+			if (mesh_name == named_textures[i].prefix || mesh_name.rfind(named_textures[i].prefix, 0) == 0) {
+				if (i < textures->size()) {
+					GLuint tex_id = (*textures)[i];
+					if (tex_id != 0) {
+						drawable.pipeline.textures[0].texture = tex_id;
+						drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+						found_texture = true;
+						break;
+					}
+				}
+			}
 		}
-
-		Civilian c;
-		c.transform = transform;
-		c.base_rotation = transform->rotation;
-		c.start_pos = glm::vec2(location.x, location.y);
-		civilians.emplace_back(std::move(c));
-	};
+		if (!found_texture) {
+			std::cout << "No texture found for enemy mesh '" << mesh_name << std::endl;
+		}
+		
+		auto rig_ptr = enemy_rigs.back().get();
+		drawable.pipeline.set_uniforms = [rig_ptr]() {
+			rig_ptr->bind_pose_ubo();
+		};
+	}
 
 	// populate civilians
 	std::mt19937 civilians_rng{std::random_device{}()};
 	glm::vec3 center = glm::vec3(-40.0f, -30.0f, 0.0f);
-	for (int i = 0; i < 4; i++) {
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
-
-		make_civilian(center + glm::vec3(x, y, 0.3f));
-	}
-	center = glm::vec3(-5.0f, 0.0f, 0.0f);
-	for (int i = 0; i < 4; i++) {
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
-
-		make_civilian(center + glm::vec3(x, y, 0.3f));
-	}
 	center = glm::vec3(0.0f, 40.0f, 0.0f);
-	for (int i = 0; i < 4; i++) {
+	
+	{
 		float x = rand(civilians_rng, -10.0f, 10.0f);
 		float y = rand(civilians_rng, -10.0f, 10.0f);
-
-		make_civilian(center + glm::vec3(x, y, 0.3f));
+		make_civilian(this, "civilian_00", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_01", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_02", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_03", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_04", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_05", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_06", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_07", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_08", center + glm::vec3(x, y, 0.3f));
+	}
+	{
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+		make_civilian(this, "civilian_09", center + glm::vec3(x, y, 0.3f));
 	}
 
-	// -- populate rigged mesh --
-	// Enemy
-	scene.drawables.emplace_back(enemy);
-	Scene::Drawable &enemy_drawable = scene.drawables.back();
-	enemy_drawable.pipeline = skinning_program_pipeline;
-	enemy_drawable.pipeline.vao =
-		enemy_rig->make_vao_for_program(skinning_program->program);
-	enemy_drawable.pipeline.type = enemy_rig->mesh.type;
-	enemy_drawable.pipeline.start = enemy_rig->mesh.start;
-	enemy_drawable.pipeline.count = enemy_rig->mesh.count;
+	for (auto &civilian : civilians) {
+		for (auto& rig : civilian.rigs) {
+			rig->anim_graph = &civilian.graph;
+		}
+		
+		// Randomize initial state
+		std::uniform_real_distribution<float> state_dist(0.0f, 1.0f);
+		float state_r = state_dist(civilian.rng);		
+		std::string initial_state = "Stand";
+		if (state_r < 0.33f) {
+			initial_state = "Stand";
+		} else if (state_r < 0.66f) {
+			initial_state = "Walk";
+		} else {
+			initial_state = "Run";
+		}
+		auto state_it = civilian.graph.states.find(initial_state);
+		civilian.graph.current_state = &state_it->second;
+		if (initial_state == "Stand") {
+			civilian.state = Civilian::STAND;
+		} else if (initial_state == "Walk") {
+			civilian.state = Civilian::WALK;
+		} else if (initial_state == "Run") {
+			civilian.state = Civilian::RUN;
+		}
+		
+		// Randomize initial direction
+		float yaw = rand(civilian.rng, 0.0f, 2.0f * 3.14f);
+		civilian.transform->rotation = glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f));
+		civilian.base_rotation = civilian.transform->rotation;
+	}
+
+	// Gate
+	if (gate_rig) {
+		scene.drawables.emplace_back(gate);
+		Scene::Drawable &gate_drawable = scene.drawables.back();
+		gate_drawable.pipeline = skinning_program_pipeline;
+		gate_drawable.pipeline.vao =
+			gate_rig->make_vao_for_program(skinning_program->program);
+		gate_drawable.pipeline.type = gate_rig->mesh.type;
+		gate_drawable.pipeline.start = gate_rig->mesh.start;
+		gate_drawable.pipeline.count = gate_rig->mesh.count;
+	}
 
 	// get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -703,10 +916,12 @@ void PlayMode::update(float elapsed) {
 			enemy_collapsing = false; // finished collapsing
 		}
 	}
-	// animate
-	enemy->scale = glm::vec3(1.5f);
-	// enemy_graph.update(elapsed);
-	enemy_rig->update(elapsed);
+	enemy->scale = glm::vec3(1.3f);
+	enemy_graph.update(elapsed);
+
+	for (auto& rig : enemy_rigs) {
+		rig->update(elapsed);
+	}
 
 	if (gate_anim_playing)  {
 		gate_rot_t += elapsed;
@@ -878,12 +1093,118 @@ void PlayMode::update(float elapsed) {
 		watched_accum += elapsed;
 		if (watched_accum >= watch_to_gameover) {
 			trigger_game_over();
+		} else {
+			// continuous requirement: reset if not watched this frame
+			watched_accum = 0.0f;
 		}
-	} else {
-		// no one is watching this frame → reset the timer
-		watched_accum = 0.0f;
+	} else if (watched_latched) {
+		bool out_of_range = true;
+		bool blocked_now = false;
+
+		if (enemy && player) {
+			glm::mat4x3 e_world = enemy->make_world_from_local();
+			glm::vec3 e_pos = e_world[3];
+			float dist = glm::length(player->position - e_pos);
+			out_of_range = !(dist <= enemy_view_distance);
+
+			auto occluded_enemy_to_player = [&]() -> bool { return false; };
+			blocked_now = occluded_enemy_to_player();
+		}
+
+		if (out_of_range || blocked_now) {
+			watched_grace_timer -= elapsed;
+			if (watched_grace_timer <= 0.0f)
+				watched_latched = false;
+		} else {
+			// still good; refresh
+			watched_grace_timer = watched_grace;
+		}
 	}
-	//2025/11/22 update
+
+	// --- Enemy behavior: Stand-and-watch vs Patrol ---
+
+	if (enemy && enemy_alive && !enemy_collapsing) {
+		auto set_state = [&](const std::string &name) {
+			auto it = enemy_graph.states.find(name);
+			if (it != enemy_graph.states.end()) {
+				enemy_graph.current_state = &it->second;
+				enemy_graph.playback = 0.0f;
+				enemy_graph.keyframe_index = 0;
+			}
+		};
+		
+		if (enemy_state == ENEMY_BETWEEN && enemy_graph.current_state) {
+			const auto &anim = enemy_graph.current_state->animation;
+			if (!anim.loop && enemy_graph.playback >= anim.get_anim_length()) {
+				if (anim.name == "StandToWalk") {
+					set_state("Walk");
+					enemy_state = ENEMY_WALK;
+				} else if (anim.name == "WalkToStand") {
+					set_state("Stand");
+					enemy_state = ENEMY_STAND;
+				}
+			}
+		}
+		
+		if (enemy_state != ENEMY_BETWEEN) {
+			auto change_state = [&](EnemyState next) {
+				if (next == enemy_state) return;
+				if (enemy_state == ENEMY_STAND && next == ENEMY_WALK) {
+					set_state("StandToWalk");
+					enemy_state = ENEMY_BETWEEN;
+				} else if (enemy_state == ENEMY_WALK && next == ENEMY_STAND) {
+					set_state("WalkToStand");
+					enemy_state = ENEMY_BETWEEN;
+				} else {
+					set_state(next == ENEMY_STAND ? "Stand" : "Walk");
+					enemy_state = next;
+				}
+			};
+			
+			glm::vec2 to_player_xy(0.0f);
+			float to_player_dist = 0.0f;
+			if (player) {
+				glm::vec3 v = player->position - enemy->position;
+				to_player_xy = glm::vec2(v.x, v.y);
+				to_player_dist = glm::length(to_player_xy);
+			}
+
+			if (watched_latched) {
+				change_state(ENEMY_STAND);
+				if (to_player_dist > 1e-4f) {
+					glm::vec2 dir = to_player_xy / to_player_dist;
+					float yaw = std::atan2(dir.x, dir.y);
+					glm::quat target_rot = glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) * enemy_base_rotation;
+					enemy->rotation = glm::slerp(enemy->rotation, target_rot, 1.0f - std::exp(-8.0f * elapsed));
+				}
+			} else if (!enemy_waypoints.empty()) {
+				if (enemy_wait_timer > 0.0f) {
+					enemy_wait_timer = std::max(0.0f, enemy_wait_timer - elapsed);
+					change_state(ENEMY_STAND);
+				} else {
+					glm::vec3 target = enemy_waypoints[enemy_wp_idx];
+					glm::vec2 to = glm::vec2(target.x - enemy->position.x, target.y - enemy->position.y);
+					float dist = glm::length(to);
+
+					if (dist <= enemy_reach_epsilon) {
+						enemy_wp_idx = (enemy_wp_idx + 1) % enemy_waypoints.size();
+						enemy_wait_timer = enemy_wait_at_point;
+						change_state(ENEMY_STAND);
+					} else if (dist > 0.0f) {
+						change_state(ENEMY_WALK);
+						glm::vec2 dir = to / dist;
+						float step = std::min(enemy_speed * elapsed, dist);
+						enemy->position.x += dir.x * step;
+						enemy->position.y += dir.y * step;
+						enemy->position.z = 0.3f;
+						float yaw = std::atan2(dir.x, dir.y);
+						glm::quat target_rot = glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) * enemy_base_rotation;
+						enemy->rotation = glm::slerp(enemy->rotation, target_rot, 1.0f - std::exp(-8.0f * elapsed));
+					}
+				}
+			}
+		}
+	}
 
 	// update civilians
 	for (auto &civilian : civilians) {
@@ -892,38 +1213,6 @@ void PlayMode::update(float elapsed) {
 	resolve_collisions(civilians);
 	civilian_avoid_obstacles(civilians, {{player, 0.7f}, {enemy, 0.7f}});
 
-	//2025/11/22 update
-	// --- Make the watching civilian rotate to face the player ---
-	if (player) {
-		for (auto &civ : civilians) {
-			if (!civ.transform) continue;
-			if (!civ.watching_player) continue;
-
-			// planar direction from civilian to player
-			glm::vec3 to_player3 = player->position - civ.transform->position;
-			to_player3.z = 0.0f; // ignore height
-
-			glm::vec2 dir(to_player3.x, to_player3.y);
-			float len = glm::length(dir);
-			if (len < 1e-4f) continue;
-
-			dir /= len;
-			// +Y is forward, so angle is atan2(x, y)
-			float angle = std::atan2(dir.x, dir.y);
-
-			glm::quat target_rot =
-				glm::angleAxis(angle, glm::vec3(0.0f, 0.0f, 1.0f)) *
-				civ.base_rotation;
-
-			// smooth turn toward player
-			civ.transform->rotation = glm::slerp(
-				civ.transform->rotation,
-				target_rot,
-				1.0f - std::exp(-0.5f * elapsed)
-			);
-		}
-	}
-	//2025/11/22 update//
 	// --- Audio listener follow player ---
 	{
 		glm::mat4x3 frame = player->make_parent_from_local();
@@ -999,13 +1288,11 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glUniform3fv(particle_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));	
 	glUseProgram(0);
 
-	// //set up light type and position for lit_color_texture_program:
-	// // TODO: consider using the Light(s) in the scene to do this
-	// glUseProgram(lit_color_texture_program->program);
-	// glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
-	// glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
-	// glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
-	// glUseProgram(0);
+	glUseProgram(skinning_lit_color_texture_program->program);
+	glUniform1i(skinning_lit_color_texture_program->LIGHT_TYPE_int, 1); // hemisphere light
+	glUniform3fv(skinning_lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, -1.0f)));
+	glUniform3fv(skinning_lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
+	glUseProgram(0);
 
 	//--- draw geometry to framebuffer ---
 	fb.resize(drawable_size);
@@ -1176,6 +1463,92 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	glBindVertexArray(0);                   // Unbind VAO
 	glUseProgram(0);                        // Unbind shader program
+
+	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
+	
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	
+	for (Scene::Drawable *drawable : enemy_drawables) {
+		if (!drawable) continue;
+		
+		Scene::Drawable::Pipeline const &pipeline = drawable->pipeline;
+		
+		if (pipeline.program == 0 || pipeline.vao == 0 || pipeline.count == 0) continue;
+		glUseProgram(pipeline.program);
+		glBindVertexArray(pipeline.vao);
+		glm::mat4x3 world_from_object = drawable->transform->make_world_from_local();
+		glm::mat4 clip_from_object = clip_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4fv(pipeline.CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_object));
+		
+		glm::mat4x3 light_from_object = light_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4x3fv(pipeline.LIGHT_FROM_OBJECT_mat4x3, 1, GL_FALSE, glm::value_ptr(light_from_object));
+
+		glm::mat3 light_from_normal = glm::inverse(glm::transpose(glm::mat3(light_from_object)));
+		glUniformMatrix3fv(pipeline.LIGHT_FROM_NORMAL_mat3, 1, GL_FALSE, glm::value_ptr(light_from_normal));
+		
+		if (pipeline.set_uniforms) pipeline.set_uniforms();
+		
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, pipeline.textures[i].texture);
+			}
+		}
+		
+		glDrawArrays(pipeline.type, pipeline.start, pipeline.count);
+		
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, 0);
+			}
+		}
+		glActiveTexture(GL_TEXTURE0);
+	}
+	
+	// Draw civilian
+	for (Scene::Drawable *drawable : civilian_drawables) {
+		if (!drawable) continue;
+		
+		Scene::Drawable::Pipeline const &pipeline = drawable->pipeline;
+		
+		if (pipeline.program == 0 || pipeline.vao == 0 || pipeline.count == 0) continue;
+		glUseProgram(pipeline.program);
+		glBindVertexArray(pipeline.vao);
+		
+		glm::mat4x3 world_from_object = drawable->transform->make_world_from_local();
+		glm::mat4 clip_from_object = clip_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4fv(pipeline.CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_object));
+		
+		glm::mat4x3 light_from_object = light_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4x3fv(pipeline.LIGHT_FROM_OBJECT_mat4x3, 1, GL_FALSE, glm::value_ptr(light_from_object));
+		glm::mat3 light_from_normal = glm::inverse(glm::transpose(glm::mat3(light_from_object)));
+		glUniformMatrix3fv(pipeline.LIGHT_FROM_NORMAL_mat3, 1, GL_FALSE, glm::value_ptr(light_from_normal));
+		
+		if (pipeline.set_uniforms) pipeline.set_uniforms();
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, pipeline.textures[i].texture);
+			}
+		}
+		
+		glDrawArrays(pipeline.type, pipeline.start, pipeline.count);
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, 0);
+			}
+		}
+		glActiveTexture(GL_TEXTURE0);
+	}
+	
+	glUseProgram(0);
+	glBindVertexArray(0);
 
 	//--- stalking mechanics ---
 	if (focus_mode) {

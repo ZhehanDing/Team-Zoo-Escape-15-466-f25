@@ -71,7 +71,6 @@ struct AnimationGraph {
     State *current_state = nullptr;
     uint32_t keyframe_index = 0;
 
-    // ranges fro 0-1
     float playback = 0;
 
     // requires a user-defined interpolation function as input
@@ -220,7 +219,11 @@ AnimationBuffer< T >::AnimationBuffer(std::string const &filename, bool loop) {
             } 
 
             std::string name(&strings[0] + anim_entry.name_begin, &strings[0] + anim_entry.name_end);
-            Animation< T > anim(name, fps, loop);
+            bool should_loop = loop;
+            if (filename.find("human.anim") != std::string::npos) {
+                should_loop = (name == "Stand" || name == "Walk" || name == "Run");
+            }
+            Animation< T > anim(name, fps, should_loop);
             anim.data.assign(
                 data.begin() + anim_entry.keyframe_begin,
                 data.begin() + anim_entry.keyframe_end
