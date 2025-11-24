@@ -62,6 +62,7 @@ BasicMaterialDeferredObjectProgram::BasicMaterialDeferredObjectProgram() {
 		"uniform mat4 OBJECT_TO_CLIP;\n"            // Transform matrix from object space to clip space
 		"uniform mat4x3 OBJECT_TO_LIGHT;\n"         // Transform matrix from object space to light space (3x4 matrix)
 		"uniform mat3 NORMAL_TO_LIGHT;\n"           // Transform matrix for normals to light space
+		"uniform int SKY_MODE;\n"          			// 0 = normal object, 1 = sky dome
 		"in vec4 Position;\n"                       // Input vertex position
 		"in vec3 Normal;\n"                         // Input vertex normal
 		"in vec4 Color;\n"                          // Input vertex color
@@ -71,6 +72,10 @@ BasicMaterialDeferredObjectProgram::BasicMaterialDeferredObjectProgram() {
 		"out vec4 color;\n"                         // Output vertex color
 		"out vec2 texCoord;\n"                      // Output texture coordinates
 		"void main() {\n"
+		"	vec4 pos = Position;\n"
+		"    if (SKY_MODE != 0) {\n"
+		"        pos.w = 0.0;\n"					// treat as direction, not point
+		"    }\n"
 		"	gl_Position = OBJECT_TO_CLIP * Position;\n"    // Transform vertex to clip space
 		"	position = OBJECT_TO_LIGHT * Position;\n"       // Transform vertex to light space
 		"	normal = NORMAL_TO_LIGHT * Normal;\n"           // Transform normal to light space
@@ -113,6 +118,8 @@ BasicMaterialDeferredObjectProgram::BasicMaterialDeferredObjectProgram() {
 	ROUGHNESS_float = glGetUniformLocation(program, "ROUGHNESS");
 
 	GLuint TEX_sampler2D = glGetUniformLocation(program, "TEX");
+
+	SKY_MODE_int = glGetUniformLocation(program, "SKY_MODE");
 
 	//set TEX to always refer to texture binding zero:
 	glUseProgram(program); //bind program -- glUniform* calls refer to this program now

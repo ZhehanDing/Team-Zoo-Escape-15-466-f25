@@ -5,6 +5,9 @@
 #include "BasicMaterialDeferredProgram.hpp"
 #include "LightMeshes.hpp"
 #include "CopyToScreenProgram.hpp"
+#include "ParticleProgram.hpp"
+#include "Textures.hpp"
+#include "Collision.hpp"
 
 #include "Animation.hpp"
 #include "DrawLines.hpp"
@@ -13,6 +16,7 @@
 #include "RiggedMesh.hpp"
 #include "Skeleton.hpp"
 #include "SkinningLitColorTextureProgram.hpp"
+#include "SkinningProgram.hpp"
 #include "gl_errors.hpp"
 #include "load_save_png.hpp"
 #include "data_path.hpp"
@@ -66,16 +70,36 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		drawable.pipeline.count = mesh.count;
 
 		float roughness = 1.0f;
-		if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
-			roughness = (transform->position.y + 10.0f) / 18.0f;
-		}
-		drawable.pipeline.set_uniforms = [roughness](){
-			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
-		};
-	});
+		// if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
+		// 	roughness = (transform->position.y + 10.0f) / 18.0f;
+		// }
 
-	return ret;
-});
+		// printf("-- Transform name: %s\n", transform->name.c_str());
+		for (size_t i = 0; i < named_textures.size(); ++i)
+		{
+			// printf("Checking prefix: %s\n", named_textures[i].prefix.c_str());
+			if (transform->name.rfind(named_textures[i].prefix, 0) == 0)
+			{
+				if (i < textures->size())
+				{
+					// printf("Assigning texture %s to object %s\n", named_textures[i].filename.c_str(), transform->name.c_str());
+					drawable.pipeline.textures[0].texture = (*textures)[i];
+					drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+				}
+				break;
+			}
+		}
+
+		bool is_sky = (transform->name == "Sky");
+		drawable.pipeline.set_uniforms = [roughness, is_sky]()
+		{
+			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
+			glUniform1i(basic_material_deferred_object_program->SKY_MODE_int,
+						is_sky ? 1 : 0);
+		};
+		});
+
+		return ret; });
 
 // Helper: maintain a framebuffer to hold rendered geometry
 struct FB {
@@ -196,20 +220,6 @@ void make_civilian(
 
 	Skeleton const &human_skel = skeleton_buffer->lookup("Human.rigify");
 
-	GLuint total_vertex_count = 0;
-	GLuint largest_start = 0;
-	for (auto p : mesh_buffer->meshes) {
-		if (largest_start < p.second.start) {
-			largest_start = p.second.start;
-			total_vertex_count = largest_start + p.second.count;
-		}
-	}
-
-	Mesh human_mesh;
-	human_mesh.type = GL_TRIANGLES;
-	human_mesh.start = 0;
-	human_mesh.count = total_vertex_count;
-
 	auto g = [](const Skeleton::BoneTransform &a,
 				const Skeleton::BoneTransform &b,
 				float t) {
@@ -225,8 +235,6 @@ void make_civilian(
 	transform->position = location;
 	transform->rotation = glm::quat(1, 0, 0, 0);
 	transform->scale = glm::vec3(1.1f);
-	playmode->scene.drawables.emplace_back(transform);
-	Scene::Drawable &dr = playmode->scene.drawables.back();
 
 	Civilian c;
 	c.transform = transform;
@@ -245,23 +253,86 @@ void make_civilian(
 	c.graph.add_state(c.anim_buffer->lookup("WalkToStand"));
 	c.graph.add_state(c.anim_buffer->lookup("StandToWalk"));
 	
-	c.rig = std::make_unique< RiggedMesh >(mesh_buffer->buffer, infl_buffer->buffer, human_mesh, *c.skel, &c.graph);
-
-	dr.pipeline = skinning_lit_color_texture_program_pipeline;
-	dr.pipeline.vao = c.rig->make_vao_for_program(skinning_lit_color_texture_program->program);
-	dr.pipeline.type = c.rig->mesh.type;
-	dr.pipeline.start = c.rig->mesh.start;
-	dr.pipeline.count = c.rig->mesh.count;
 	c.rng.seed(std::random_device{}() ^ (++seed_counter));
 
-	auto rig_ptr = c.rig.get();
-
-	auto base_set_uniforms = dr.pipeline.set_uniforms;
-
-	dr.pipeline.set_uniforms = [rig_ptr, base_set_uniforms]() {
-		if (base_set_uniforms) base_set_uniforms();
-		rig_ptr->bind_pose_ubo();
-	};
+	std::vector<std::string> renderable_mesh_names;
+	for (const auto& mesh_pair : mesh_buffer->meshes) {
+		const std::string& mesh_name = mesh_pair.first;
+		if (mesh_name.find("WGT-") == 0) continue;
+		renderable_mesh_names.push_back(mesh_name);
+	}
+	c.rigs.clear();
+	c.rigs.reserve(renderable_mesh_names.size());
+	
+	for (const std::string& mesh_name : renderable_mesh_names) {
+		const Mesh& mesh = mesh_buffer->lookup(mesh_name);
+		c.rigs.emplace_back(std::make_unique< RiggedMesh >(
+			mesh_buffer->buffer, infl_buffer->buffer, mesh, *c.skel, &c.graph));
+		c.rigs.back()->anim_graph = &c.graph;
+		
+		playmode->scene.drawables.emplace_back(transform);
+		Scene::Drawable &drawable = playmode->scene.drawables.back();
+		playmode->civilian_drawables.push_back(&drawable);
+		
+		drawable.pipeline = skinning_lit_color_texture_program_pipeline;
+		drawable.pipeline.vao = c.rigs.back()->make_vao_for_program(skinning_lit_color_texture_program->program);
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;
+		
+		bool found_texture = false;
+		
+		std::string texture_match_name = mesh_name;
+		if (mesh_name == "base") {
+			std::string civ_num = "";
+			size_t underscore_pos = civilian_name.find('_');
+			if (underscore_pos != std::string::npos && underscore_pos + 1 < civilian_name.length()) {
+				civ_num = civilian_name.substr(underscore_pos + 1);
+				texture_match_name = "base_" + civ_num;
+			}
+		}
+		
+		if (texture_match_name != mesh_name) {
+			for (size_t i = 0; i < named_textures.size(); ++i) {
+				if (texture_match_name == named_textures[i].prefix) {
+					if (i < textures->size()) {
+						GLuint tex_id = (*textures)[i];
+						if (tex_id != 0) {
+							drawable.pipeline.textures[0].texture = tex_id;
+							drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+							found_texture = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+		
+		if (!found_texture) {
+			for (size_t i = 0; i < named_textures.size(); ++i) {
+				if (mesh_name == named_textures[i].prefix || 
+				    mesh_name.rfind(named_textures[i].prefix, 0) == 0) {
+					if (i < textures->size()) {
+						GLuint tex_id = (*textures)[i];
+						if (tex_id != 0) {
+							drawable.pipeline.textures[0].texture = tex_id;
+							drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+							found_texture = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+		if (!found_texture) {
+			std::cout << "No texture found for civilian '" << civilian_name << "' mesh '" << mesh_name << std::endl;
+		}
+		
+		auto rig_ptr = c.rigs.back().get();
+		drawable.pipeline.set_uniforms = [rig_ptr]() {
+			rig_ptr->bind_pose_ubo();
+		};
+	}
 	
 	playmode->civilians.emplace_back(std::move(c));
 }
@@ -278,11 +349,21 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		}
 		if (transform.name == "Sky") sky = &transform;
 		if (transform.name == "Gate") gate = &transform;
-		if (transform.name.rfind("Fence", 0) == 0)
-		{ // prefix match
-			fences.push_back(&transform);
-			// printf("Found fence: %s\n", transform.name.c_str());
-		}
+		if (transform.name == "Collider_Gate") gate_collider = &transform;
+		if (transform.name == "Collider_Deer Fence") deer_fence_collider = &transform;
+		if (transform.name == "Collider_Zoo Fence Near") zoo_fence_near_collider = &transform;
+		if (transform.name == "Collider_Zoo Fence Far") zoo_fence_far_collider = &transform;
+		// if (transform.name == "Small House Main") small_house = &transform;
+	
+		// if (transform.name.rfind("Wood Cylinder", 0) == 0)
+		// {
+		// 	cylinders.push_back(&transform);
+		// 	// printf("Found tree: %s\n", transform.name.c_str());
+		// }
+		// if (transform.name.rfind("Collider", 0) == 0)
+		// {
+		// 	colliders.push_back(&transform);
+		// }
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
@@ -290,6 +371,10 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
 	if (gate == nullptr) throw std::runtime_error("gate not found.");
+	if (gate_collider == nullptr) throw std::runtime_error("gate_collider not found.");
+	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
+	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
+	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
 
 	scene.drawables.remove_if([this](Scene::Drawable const &drawable) {
 		return drawable.transform == enemy;
@@ -298,19 +383,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	player_base_rotation = player->rotation;
 
 	Skeleton const &enemy_skel = enemy_skeletons->lookup("Human.rigify");
-	GLuint total_vertex_count = 0;
-	GLuint largest_start = 0;
-	for (auto p : enemy_meshes->meshes) {
-		if (largest_start < p.second.start) {
-			largest_start = p.second.start;
-			total_vertex_count = largest_start + p.second.count;
-		}
-	}
-
-	Mesh enemy_mesh;
-	enemy_mesh.type = GL_TRIANGLES;
-	enemy_mesh.start = 0;
-	enemy_mesh.count = total_vertex_count;
 
 	enemy_skeleton = std::make_unique< Skeleton >(enemy_skel);
 	auto g = [](const Skeleton::BoneTransform &a,
@@ -322,11 +394,71 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		out.scale = glm::mix(a.scale, b.scale, t);
 		return out;
 	};
+	
 	enemy_graph = AnimationGraph< Skeleton::BoneTransform >(g);
+	enemy_graph.add_state(human_animations->lookup("Stand"));
 	enemy_graph.add_state(human_animations->lookup("Walk"));
-	enemy_rig = std::make_unique< RiggedMesh >(
-		enemy_meshes->buffer, enemy_infls->buffer, enemy_mesh, *enemy_skeleton, &enemy_graph);
-	enemy_rig->anim_graph = &enemy_graph;
+	enemy_graph.add_state(human_animations->lookup("StandToWalk"));
+	enemy_graph.add_state(human_animations->lookup("WalkToStand"));
+	
+	// Start with Stand animation
+	auto stand_it = enemy_graph.states.find("Stand");
+	if (stand_it != enemy_graph.states.end()) {
+		enemy_graph.current_state = &stand_it->second;
+		enemy_graph.playback = 0.0f;
+		enemy_graph.keyframe_index = 0;
+	}
+	enemy_state = ENEMY_STAND;
+	
+	std::vector<std::string> renderable_mesh_names;
+	for (const auto& mesh_pair : enemy_meshes->meshes) {
+		const std::string& mesh_name = mesh_pair.first;
+		if (mesh_name.find("WGT-") == 0) continue;
+		renderable_mesh_names.push_back(mesh_name);
+	}
+	enemy_rigs.clear();
+	enemy_rigs.reserve(renderable_mesh_names.size());
+	enemy_drawables.clear();
+	enemy_drawables.reserve(renderable_mesh_names.size());
+	
+	for (const std::string& mesh_name : renderable_mesh_names) {
+		const Mesh& mesh = enemy_meshes->lookup(mesh_name);
+		enemy_rigs.emplace_back(std::make_unique< RiggedMesh >(
+			enemy_meshes->buffer, enemy_infls->buffer, mesh, *enemy_skeleton, &enemy_graph));
+		enemy_rigs.back()->anim_graph = &enemy_graph;
+
+		scene.drawables.emplace_back(enemy);
+		Scene::Drawable &drawable = scene.drawables.back();
+		enemy_drawables.push_back(&drawable);
+		drawable.pipeline = skinning_lit_color_texture_program_pipeline;
+		drawable.pipeline.vao = enemy_rigs.back()->make_vao_for_program(skinning_lit_color_texture_program->program);
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;
+		
+		bool found_texture = false;
+		for (size_t i = 0; i < named_textures.size(); ++i) {
+			if (mesh_name == named_textures[i].prefix || mesh_name.rfind(named_textures[i].prefix, 0) == 0) {
+				if (i < textures->size()) {
+					GLuint tex_id = (*textures)[i];
+					if (tex_id != 0) {
+						drawable.pipeline.textures[0].texture = tex_id;
+						drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+						found_texture = true;
+						break;
+					}
+				}
+			}
+		}
+		if (!found_texture) {
+			std::cout << "No texture found for enemy mesh '" << mesh_name << std::endl;
+		}
+		
+		auto rig_ptr = enemy_rigs.back().get();
+		drawable.pipeline.set_uniforms = [rig_ptr]() {
+			rig_ptr->bind_pose_ubo();
+		};
+	}
 
 	// populate civilians
 	std::mt19937 civilians_rng{std::random_device{}()};
@@ -385,7 +517,9 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	}
 
 	for (auto &civilian : civilians) {
-		civilian.rig->anim_graph = &civilian.graph;
+		for (auto& rig : civilian.rigs) {
+			rig->anim_graph = &civilian.graph;
+		}
 		
 		// Randomize initial state
 		std::uniform_real_distribution<float> state_dist(0.0f, 1.0f);
@@ -414,14 +548,17 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		civilian.base_rotation = civilian.transform->rotation;
 	}
 
-	scene.drawables.emplace_back(enemy);
-	Scene::Drawable &enemy_drawable = scene.drawables.back();
-	enemy_drawable.pipeline = skinning_lit_color_texture_program_pipeline;
-	enemy_drawable.pipeline.vao =
-		enemy_rig->make_vao_for_program(skinning_lit_color_texture_program->program);
-	enemy_drawable.pipeline.type = enemy_rig->mesh.type;
-	enemy_drawable.pipeline.start = enemy_rig->mesh.start;
-	enemy_drawable.pipeline.count = enemy_rig->mesh.count;
+	// Gate
+	if (gate_rig) {
+		scene.drawables.emplace_back(gate);
+		Scene::Drawable &gate_drawable = scene.drawables.back();
+		gate_drawable.pipeline = skinning_program_pipeline;
+		gate_drawable.pipeline.vao =
+			gate_rig->make_vao_for_program(skinning_program->program);
+		gate_drawable.pipeline.type = gate_rig->mesh.type;
+		gate_drawable.pipeline.start = gate_rig->mesh.start;
+		gate_drawable.pipeline.count = gate_rig->mesh.count;
+	}
 
 	// get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -515,12 +652,7 @@ PlayMode::~PlayMode() {
 	if (deer_ui_vbo) glDeleteBuffers(1, &deer_ui_vbo);
 	if (deer_ui_vao) glDeleteVertexArrays(1, &deer_ui_vao);
 	*/
-	attraction_sounds = {
-		attraction_voice_1,  // implicit convert to Sound::Sample const *
-		attraction_voice_2,
-		attraction_voice_3,
-		attraction_voice_4
-	};
+
 
 }
 
@@ -571,20 +703,61 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			return true;
 		}else if (evt.key.key == SDLK_G) {
 			if (attraction_ability && attraction_cooldown_timer <= 0.0f && !game_over) {
-				if (!attraction_sounds.empty()) {
-					std::uniform_int_distribution<int> dist(0, int(attraction_sounds.size()) - 1);
-					int idx = dist(rng);
 
-					// Play voice sound (non-3D version)
-					Sound::play(*attraction_sounds[idx], 1.0f, 1.0f);
+				// 1. Pick random ID from list 1–4
+				std::uniform_int_distribution<int> dist(0, int(attraction_ids.size()) - 1);
+				int id = attraction_ids[dist(rng)];
 
-					// Optional 3D positional version:
-					// glm::vec3 p = player->make_world_from_local()[3];
-					// Sound::play_3D(*attraction_sounds[idx], p, 1.0f, 1.0f);
+				// 2. Play sound depending on ID
+				switch (id) {
+					case 1:
+						Sound::play(*attraction_voice_1, 1.0f, 1.0f);
+						break;
+					case 2:
+						Sound::play(*attraction_voice_2, 1.0f, 1.0f);
+						break;
+					case 3:
+						Sound::play(*attraction_voice_3, 1.0f, 1.0f);
+						break;
+					case 4:
+						Sound::play(*attraction_voice_4, 1.0f, 1.0f);
+						break;
+				}
+				for (auto &civ : civilians) {
+					if (!civ.transform) continue;
 
-					attraction_cooldown_timer = attraction_cooldown;
+					float dist_xy = glm::length(
+						glm::vec2(
+							civ.transform->position.x - player->position.x,
+							civ.transform->position.y - player->position.y
+						)
+					);
+
+					// choose radius you like (25 is pretty big)
+					if (dist_xy < 25.0f) {
+						civ.being_pulled = true;
+						civ.pull_target = player->position;
+					}
+				}				
+				// cooldown
+				attraction_cooldown_timer = attraction_cooldown;
+
+				// --- Make nearby civilians walk toward the player ---
+				for (auto &civ : civilians) {
+					// range: adjust 20.0f if needed
+					float dist = glm::length(player->position - civ.transform->position);
+					if (dist < 25.0f) {
+						civ.being_pulled = true;
+						civ.pull_target = player->position;   // goal
+					}
 				}
 			}
+			return true;
+		}
+		else if (evt.key.key == SDLK_P)
+		{
+			// TODO: gate will open when game succeeds
+    		gate_anim_playing = true; 
 			return true;
 		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
@@ -614,36 +787,38 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			target_fovy = base_fovy * 0.7f; // zoom in a bit
 			return true;
 		} else if (evt.button.button == SDL_BUTTON_LEFT) {
-			if (execution_mode) {
+			if (execution_mode && execution_target) {
 
 				// Distance calculation
 				glm::vec3 player_pos = camera->transform->make_world_from_local()[3];
-				glm::vec3 enemy_pos = enemy->make_world_from_local()[3];
+				glm::vec3 civ_pos    = execution_target->make_world_from_local()[3];
 
-				float dist = glm::length(enemy_pos - player_pos);
+				float dist = glm::length(civ_pos - player_pos);
 				if (dist <= execution_range) {
-					// === EXECUTION SUCCESS ===
+					// === EXECUTION SUCCESS ON CIVILIAN ===
 
-					// enemy is dead
-					enemy_alive = false;
 					execution_mode = false;
 					stalk_charge = 0.0f;
 
-					// instantly make enemy disappear
-					enemy->scale = glm::vec3(0.0f); // shrink to invisible
-					enemy->position.z = -100.0f;	// move far below ground to ensure hidden
-					kill_count += 1;
+					++kill_count;
+
+					// hide the civilian visually
+					execution_target->scale = glm::vec3(0.0f);
+					execution_target->position.z = -100.0f;
+
+					// clear current target so we don't keep reusing it
+					execution_target = nullptr;
 					if (kill_count >= 1) {
 						dash_skill = true;
-					} else if (kill_count >= 2) {
-						dash_skill = true;
+					}
+
+					// keep your deer_stage / reward logic as-is:
+					if (kill_count >= 2) {
 						attraction_ability = true;
 					}
 
-					if (deer_stage == 0)
-					{
-						// Level completes, gets leg // TODO: add some effect; and deer needs to attack enemy before geting their leg
-						final_deer->scale = glm::vec3(0.0f); // hide original deer
+					if (deer_stage == 0) {
+						final_deer->scale = glm::vec3(0.0f);  // hide original deer
 						final_deer_leg->scale = glm::vec3(0.7f);
 						deer_stage = 1;
 					}
@@ -679,13 +854,6 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	return false;
 }
 
-bool check_collision(glm::vec3 posA, glm::vec3 halfSizeA, glm::vec3 posB, glm::vec3 halfSizeB)
-{
-	return (std::abs(posA.x - posB.x) <= (halfSizeA.x + halfSizeB.x)) &&
-		   (std::abs(posA.y - posB.y) <= (halfSizeA.y + halfSizeB.y)) &&
-		   (std::abs(posA.z - posB.z) <= (halfSizeA.z + halfSizeB.z));
-}
-
 void PlayMode::update(float elapsed) {
 	if (game_over) {
 		// Optional: keep camera/UI effects, but block gameplay logic
@@ -704,6 +872,9 @@ void PlayMode::update(float elapsed) {
 			target_fovy = base_fovy; // restore zoom after dash
 		}
 	}
+	if (attraction_cooldown_timer > 0.0f) {
+    attraction_cooldown_timer = std::max(0.0f, attraction_cooldown_timer - elapsed);
+	}
 
 	// --- Enemy collapse animation (after execution) ---
 	if (enemy && enemy_collapsing) {
@@ -720,65 +891,94 @@ void PlayMode::update(float elapsed) {
 	}
 	enemy->scale = glm::vec3(1.3f);
 	enemy_graph.update(elapsed);
-	enemy_rig->update(elapsed);
+
+	for (auto& rig : enemy_rigs) {
+		rig->update(elapsed);
+	}
+	if (gate_rig && gate_anim_playing)  {
+		gate_graph.update(elapsed);
+		gate_rig->update(elapsed);
+	}
 
 	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 
 	// --- Player movement (WASD, relative to camera) ---
 	{
-		if (dashing) {
+		if (dashing)
+		{
 			player->position += dash_dir * dash_speed * elapsed;
-		} else {
+		}
+		else
+		{
 			constexpr float PlayerSpeed = 30.0f;
 			glm::vec2 move = glm::vec2(0.0f);
-			if (left.pressed && !right.pressed) move.x = -1.0f;
-			if (!left.pressed && right.pressed) move.x = 1.0f;
-			if (down.pressed && !up.pressed) move.y = -1.0f;
-			if (!down.pressed && up.pressed) move.y = 1.0f;
+			if (left.pressed && !right.pressed)
+				move.x = -1.0f;
+			if (!left.pressed && right.pressed)
+				move.x = 1.0f;
+			if (down.pressed && !up.pressed)
+				move.y = -1.0f;
+			if (!down.pressed && up.pressed)
+				move.y = 1.0f;
 
-			if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
+			if (move != glm::vec2(0.0f))
+				move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
 
 			glm::mat4x3 frame = player->make_parent_from_local();
 			glm::vec3 frame_right = -frame[0];
 			glm::vec3 frame_forward = -frame[1];
 
-		// player->position += move.x * frame_right + move.y * frame_forward;
-
-		glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
-
-		// Define approximate hitboxes (adjust to your model scale)
-		glm::vec3 player_half(1.0f, 1.0f, 1.0f);
-		glm::vec3 gate_half(2.0f, 9.0f, 3.0f);
-		glm::vec3 fence_half(2.0f, 6.0f, 3.0f);
-
-		// Check collisions
-		bool hit_gate = check_collision(new_pos, player_half, gate->position, gate_half);
-		bool hit_fence = false;
-		for (auto *f : fences)
-		{
-			if (!f)
-				continue;
-			if (check_collision(new_pos, player_half, f->position, fence_half))
+			if (move != glm::vec2(0.0f))
 			{
-				hit_fence = true;
-				break;
-			}
-		}
+				glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
+				// printf("Trying move to: %.2f, %.2f, %.2f\n", new_pos.x, new_pos.y, new_pos.z);
 
-		if (!hit_gate && !hit_fence) player->position = new_pos; // Only move if no collision
+				CollisionHits hits = query_world_collisions(
+					new_pos,
+					gate_collider,
+					deer_fence_collider,
+					zoo_fence_near_collider,
+					zoo_fence_far_collider);
+
+				if (!hits.any())
+				{
+					player->position = new_pos;
+				}
+				else
+				{
+				}
+			}
 		}
 	}
 
 	// --- Enemy on-screen check (clip-space) ---
 	enemy_on_screen = false;
-	if (enemy && enemy_alive) {
-		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-		glm::vec3 e_world = enemy->make_world_from_local()[3];
-		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
-		if (clip.w > 0.0f) {
+	execution_target = nullptr;
+	if (!civilians.empty()) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+		// pick the first civilian that is on-screen, or tweak to pick the closest
+		for (auto &civilian : civilians) {
+			// NOTE: adjust this line to however your Civilian stores its transform.
+			// e.g. if Civilian has `Scene::Transform *transform;`, this is correct:
+			Scene::Transform *t = civilian.transform;
+			if (!t) continue;
+
+			glm::vec3 c_world = t->make_world_from_local()[3];
+			glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.0f);
+			if (clip.w <= 0.0f) continue;
+
 			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
-			enemy_on_screen = (ndc.x >= -1.0f && ndc.x <= 1.0f &&
-							   ndc.y >= -1.0f && ndc.y <= 1.0f);
+			bool on_screen =
+				(ndc.x >= -1.0f && ndc.x <= 1.0f &&
+				ndc.y >= -1.0f && ndc.y <= 1.0f);
+
+			if (on_screen) {
+				enemy_on_screen = true;           // reused flag name
+				execution_target = t;             // remember which civilian we’re aiming at
+				break;                            // stop at the first on-screen civilian
+			}
 		}
 	}
 
@@ -858,57 +1058,83 @@ void PlayMode::update(float elapsed) {
 	// --- Enemy behavior: Stand-and-watch vs Patrol ---
 
 	if (enemy && enemy_alive && !enemy_collapsing) {
-		// Compute planar vector to player for turning:
-		glm::vec2 to_player_xy(0.0f);
-		float to_player_dist = 0.0f;
-		if (player) {
-			glm::vec3 v = player->position - enemy->position;
-			to_player_xy = glm::vec2(v.x, v.y);
-			to_player_dist = glm::length(to_player_xy);
-		}
-
-		if (watched_latched) {
-			// STAND STILL, ONLY ROTATE to face player while latched
-			if (to_player_dist > 1e-4f) {
-				glm::vec2 dir = to_player_xy / to_player_dist;
-				float yaw = std::atan2(dir.x, dir.y); // +Y forward
-				glm::quat target_rot =
-					glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) *
-					enemy_base_rotation;
-
-				float turn_speed = 8.0f; // tweak feel
-				enemy->rotation = glm::slerp(enemy->rotation, target_rot, 1.0f - std::exp(-turn_speed * elapsed));
+		auto set_state = [&](const std::string &name) {
+			auto it = enemy_graph.states.find(name);
+			if (it != enemy_graph.states.end()) {
+				enemy_graph.current_state = &it->second;
+				enemy_graph.playback = 0.0f;
+				enemy_graph.keyframe_index = 0;
 			}
-			// NO translation here -> feet frozen
+		};
+		
+		if (enemy_state == ENEMY_BETWEEN && enemy_graph.current_state) {
+			const auto &anim = enemy_graph.current_state->animation;
+			if (!anim.loop && enemy_graph.playback >= anim.get_anim_length()) {
+				if (anim.name == "StandToWalk") {
+					set_state("Walk");
+					enemy_state = ENEMY_WALK;
+				} else if (anim.name == "WalkToStand") {
+					set_state("Stand");
+					enemy_state = ENEMY_STAND;
+				}
+			}
+		}
+		
+		if (enemy_state != ENEMY_BETWEEN) {
+			auto change_state = [&](EnemyState next) {
+				if (next == enemy_state) return;
+				if (enemy_state == ENEMY_STAND && next == ENEMY_WALK) {
+					set_state("StandToWalk");
+					enemy_state = ENEMY_BETWEEN;
+				} else if (enemy_state == ENEMY_WALK && next == ENEMY_STAND) {
+					set_state("WalkToStand");
+					enemy_state = ENEMY_BETWEEN;
+				} else {
+					set_state(next == ENEMY_STAND ? "Stand" : "Walk");
+					enemy_state = next;
+				}
+			};
+			
+			glm::vec2 to_player_xy(0.0f);
+			float to_player_dist = 0.0f;
+			if (player) {
+				glm::vec3 v = player->position - enemy->position;
+				to_player_xy = glm::vec2(v.x, v.y);
+				to_player_dist = glm::length(to_player_xy);
+			}
 
-		} else if (!enemy_waypoints.empty()) {
-			// PATROL: waypoint walking (original logic)
-			if (enemy_wait_timer > 0.0f) {
-				enemy_wait_timer = std::max(0.0f, enemy_wait_timer - elapsed);
-			} else {
-				glm::vec3 target = enemy_waypoints[enemy_wp_idx];
-				glm::vec2 to = glm::vec2(target.x - enemy->position.x,
-										 target.y - enemy->position.y);
-				float dist = glm::length(to);
-
-				if (dist <= enemy_reach_epsilon) {
-					enemy_wp_idx = (enemy_wp_idx + 1) % enemy_waypoints.size();
-					enemy_wait_timer = enemy_wait_at_point;
-				} else if (dist > 0.0f) {
-					glm::vec2 dir = to / dist;
-					float step = enemy_speed * elapsed;
-					if (step > dist)
-						step = dist;
-
-					enemy->position.x += dir.x * step;
-					enemy->position.y += dir.y * step;
-					enemy->position.z = 0.3f;
-
+			if (watched_latched) {
+				change_state(ENEMY_STAND);
+				if (to_player_dist > 1e-4f) {
+					glm::vec2 dir = to_player_xy / to_player_dist;
 					float yaw = std::atan2(dir.x, dir.y);
-					glm::quat target_rot =
-						glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) *
-						enemy_base_rotation;
-					enemy->rotation = glm::slerp(enemy->rotation, target_rot, 1.0f - std::exp(-elapsed * 8.0f));
+					glm::quat target_rot = glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) * enemy_base_rotation;
+					enemy->rotation = glm::slerp(enemy->rotation, target_rot, 1.0f - std::exp(-8.0f * elapsed));
+				}
+			} else if (!enemy_waypoints.empty()) {
+				if (enemy_wait_timer > 0.0f) {
+					enemy_wait_timer = std::max(0.0f, enemy_wait_timer - elapsed);
+					change_state(ENEMY_STAND);
+				} else {
+					glm::vec3 target = enemy_waypoints[enemy_wp_idx];
+					glm::vec2 to = glm::vec2(target.x - enemy->position.x, target.y - enemy->position.y);
+					float dist = glm::length(to);
+
+					if (dist <= enemy_reach_epsilon) {
+						enemy_wp_idx = (enemy_wp_idx + 1) % enemy_waypoints.size();
+						enemy_wait_timer = enemy_wait_at_point;
+						change_state(ENEMY_STAND);
+					} else if (dist > 0.0f) {
+						change_state(ENEMY_WALK);
+						glm::vec2 dir = to / dist;
+						float step = std::min(enemy_speed * elapsed, dist);
+						enemy->position.x += dir.x * step;
+						enemy->position.y += dir.y * step;
+						enemy->position.z = 0.3f;
+						float yaw = std::atan2(dir.x, dir.y);
+						glm::quat target_rot = glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) * enemy_base_rotation;
+						enemy->rotation = glm::slerp(enemy->rotation, target_rot, 1.0f - std::exp(-8.0f * elapsed));
+					}
 				}
 			}
 		}
@@ -940,13 +1166,20 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::mat4 world_to_clip = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 	glm::vec3 eye = camera->transform->make_world_from_local()[3];
 
-	// //set up light type and position for lit_color_texture_program:
-	// // TODO: consider using the Light(s) in the scene to do this
-	// glUseProgram(lit_color_texture_program->program);
-	// glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
-	// glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
-	// glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
-	// glUseProgram(0);
+	// setup matrices for particles
+	glUseProgram(particle_program->program);
+	glUniformMatrix4fv(particle_program->CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(camera->make_projection() * glm::mat4(camera->transform->make_local_from_world())));
+	glUniform1fv(particle_program->ASPECT, 1, (GLfloat *)&camera->aspect);
+	glUniform1i(particle_program->LIGHT_TYPE_int, 1);
+	glUniform3fv(particle_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
+	glUniform3fv(particle_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));	
+	glUseProgram(0);
+
+	glUseProgram(skinning_lit_color_texture_program->program);
+	glUniform1i(skinning_lit_color_texture_program->LIGHT_TYPE_int, 1); // hemisphere light
+	glUniform3fv(skinning_lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, -1.0f)));
+	glUniform3fv(skinning_lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
+	glUseProgram(0);
 
 	//--- draw geometry to framebuffer ---
 	fb.resize(drawable_size);
@@ -1118,6 +1351,92 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glBindVertexArray(0);                   // Unbind VAO
 	glUseProgram(0);                        // Unbind shader program
 
+	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
+	
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	
+	for (Scene::Drawable *drawable : enemy_drawables) {
+		if (!drawable) continue;
+		
+		Scene::Drawable::Pipeline const &pipeline = drawable->pipeline;
+		
+		if (pipeline.program == 0 || pipeline.vao == 0 || pipeline.count == 0) continue;
+		glUseProgram(pipeline.program);
+		glBindVertexArray(pipeline.vao);
+		glm::mat4x3 world_from_object = drawable->transform->make_world_from_local();
+		glm::mat4 clip_from_object = clip_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4fv(pipeline.CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_object));
+		
+		glm::mat4x3 light_from_object = light_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4x3fv(pipeline.LIGHT_FROM_OBJECT_mat4x3, 1, GL_FALSE, glm::value_ptr(light_from_object));
+
+		glm::mat3 light_from_normal = glm::inverse(glm::transpose(glm::mat3(light_from_object)));
+		glUniformMatrix3fv(pipeline.LIGHT_FROM_NORMAL_mat3, 1, GL_FALSE, glm::value_ptr(light_from_normal));
+		
+		if (pipeline.set_uniforms) pipeline.set_uniforms();
+		
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, pipeline.textures[i].texture);
+			}
+		}
+		
+		glDrawArrays(pipeline.type, pipeline.start, pipeline.count);
+		
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, 0);
+			}
+		}
+		glActiveTexture(GL_TEXTURE0);
+	}
+	
+	// Draw civilian
+	for (Scene::Drawable *drawable : civilian_drawables) {
+		if (!drawable) continue;
+		
+		Scene::Drawable::Pipeline const &pipeline = drawable->pipeline;
+		
+		if (pipeline.program == 0 || pipeline.vao == 0 || pipeline.count == 0) continue;
+		glUseProgram(pipeline.program);
+		glBindVertexArray(pipeline.vao);
+		
+		glm::mat4x3 world_from_object = drawable->transform->make_world_from_local();
+		glm::mat4 clip_from_object = clip_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4fv(pipeline.CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_object));
+		
+		glm::mat4x3 light_from_object = light_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4x3fv(pipeline.LIGHT_FROM_OBJECT_mat4x3, 1, GL_FALSE, glm::value_ptr(light_from_object));
+		glm::mat3 light_from_normal = glm::inverse(glm::transpose(glm::mat3(light_from_object)));
+		glUniformMatrix3fv(pipeline.LIGHT_FROM_NORMAL_mat3, 1, GL_FALSE, glm::value_ptr(light_from_normal));
+		
+		if (pipeline.set_uniforms) pipeline.set_uniforms();
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, pipeline.textures[i].texture);
+			}
+		}
+		
+		glDrawArrays(pipeline.type, pipeline.start, pipeline.count);
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, 0);
+			}
+		}
+		glActiveTexture(GL_TEXTURE0);
+	}
+	
+	glUseProgram(0);
+	glBindVertexArray(0);
+
 	//--- stalking mechanics ---
 	if (focus_mode) {
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // stark white background for high contrast
@@ -1146,73 +1465,41 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	enemy_visible = false; // default
 
-	if (enemy && enemy_alive) {
-		glm::mat4 clip_from_world = camera->make_projection()
-			* glm::mat4(camera->transform->make_local_from_world());
-		glm::vec3 e_world = enemy->make_world_from_local()[3];
-		glm::vec4 clip = clip_from_world * glm::vec4(e_world, 1.0f);
+	if (execution_target) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+		glm::vec3 c_world = execution_target->make_world_from_local()[3];
+		glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.0f);
 
 		if (clip.w > 0.0f) {
-			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
-			// Outside of screen
-			if (ndc.x < -1.0f || ndc.x > 1.0f || ndc.y < -1.0f || ndc.y > 1.0f) {
-				enemy_visible = false;
-			} else {
-				float sx = (ndc.x * 0.5f + 0.5f) * drawable_size.x;
-				float sy = (ndc.y * 0.5f + 0.5f) * drawable_size.y;
-				int px = std::clamp(int(std::lround(sx)), 0, int(drawable_size.x) - 1);
-				int py = std::clamp(int(std::lround(sy)), 0, int(drawable_size.y) - 1);
+			glm::vec3 ndc = glm::vec3(clip) / clip.w;
 
-				float depth_sample = 1.0f;
-				glReadPixels(px, py, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth_sample);
+			// check it's in screen range
+			if (ndc.x >= -1.0f && ndc.x <= 1.0f &&
+				ndc.y >= -1.0f && ndc.y <= 1.0f) {
+					enemy_visible = true;
 
-				float enemy_depth = ndc.z * 0.5f + 0.5f;
-				const float eps = 1e-3f;
-
-				enemy_visible = !(depth_sample + eps < enemy_depth);
+				// depth sampling logic stays the same, just using c_world / execution_target
+				// (copy your existing enemy-depth code and replace `enemy` with `execution_target`)
+				// ...
+				// enemy_visible = !(depth_sample + eps < enemy_depth);
 			}
 		}
 	}
-	if (focus_mode && enemy && enemy_visible) {
-		// project enemy world position to clip space:
-		glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
-		glm::mat4x3 world_from_enemy = enemy->make_world_from_local();
-		glm::vec3 e_world = world_from_enemy[3];           // translation column
-		glm::vec4 e_clip  = clip_from_world * glm::vec4(e_world, 1.0f);
+	// draw aim indicator / outline on target civilian in focus mode
+	if (focus_mode && execution_target && enemy_visible) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
-		if (e_clip.w > 0.0f) {
-			glm::vec3 e_ndc = glm::vec3(e_clip) / e_clip.w; // [-1,1] range
-			// set up 2D line drawer (same as your text HUD uses)
-			glDisable(GL_DEPTH_TEST);
-			float aspect = float(drawable_size.x) / float(drawable_size.y);
-			DrawLines lines(glm::mat4(
-				1.0f / aspect, 0.0f, 0.0f, 0.0f,
-				0.0f, 1.0f, 0.0f, 0.0f,
-				0.0f, 0.0f, 1.0f, 0.0f,
-				0.0f, 0.0f, 0.0f, 1.0f
-			));
+		glm::mat4x3 world_from_target = execution_target->make_world_from_local();
+		glm::vec3 c_world = world_from_target[3];           // translation column
+		glm::vec4 c_clip  = clip_from_world * glm::vec4(c_world, 1.0f);
 
-			// Convert NDC to the DrawLines' coords: x in [-aspect, aspect], y in [-1,1]
-			glm::vec3 p(e_ndc.x * aspect, e_ndc.y, 0.0f);
-
-			// crosshair size (in screen space units):
-			const float s = 0.05f;
-
-			// crosshair lines (black for visibility on white bg):
-			glm::u8vec4 col(0x00, 0x00, 0x00, 0xff);
-			lines.draw(p + glm::vec3(-s, 0.0f, 0.0f), p + glm::vec3(+s, 0.0f, 0.0f), col);
-			lines.draw(p + glm::vec3(0.0f, -s, 0.0f), p + glm::vec3(0.0f, +s, 0.0f), col);
-
-			// "ENEMY" label just above the crosshair:
-			const float H = 0.06f;
-			lines.draw_text("ENEMY",
-				p + glm::vec3(-0.5f * H, +1.4f * H, 0.0f),
-				glm::vec3(H, 0.0f, 0.0f),
-				glm::vec3(0.0f, H, 0.0f),
-				col
-			);
-			glEnable(GL_DEPTH_TEST);
+		if (c_clip.w > 0.0f) {
+			// glm::vec3 c_ndc = glm::vec3(c_clip) / c_clip.w;
+			// ... existing draw_lines / crosshair overlay code, just driven by c_ndc instead of enemy
 		}
 	}
 	if (focus_mode && enemy) {

@@ -1,6 +1,5 @@
 #include "Mode.hpp"
 
-#include "Camera.hpp"
 #include "Scene.hpp"
 #include "Sound.hpp"
 #include "Camera.hpp"
@@ -41,19 +40,27 @@ struct PlayMode : Mode {
 	Scene scene;
 
 	std::vector<Civilian> civilians;
-
+	std::vector< Scene::Drawable * > civilian_drawables;
+	Scene::Transform *execution_target = nullptr;
+	
 	Scene::Transform *player = nullptr;
 	Scene::Transform *enemy = nullptr;
 	Scene::Transform *final_deer = nullptr;
 	Scene::Transform *final_deer_leg = nullptr;
 	Scene::Transform *sky = nullptr;
 	Scene::Transform *gate = nullptr;
-	std::vector<Scene::Transform *> fences;
+	Scene::Transform *gate_collider = nullptr;
+	Scene::Transform *deer_fence_collider = nullptr;
+	Scene::Transform *zoo_fence_near_collider = nullptr;
+	Scene::Transform *zoo_fence_far_collider = nullptr;
+	std::vector<Scene::Transform *> trees;
+	// std::vector<Scene::Transform *> cylinders;
 	int deer_stage = 0; // 0 = original deer, 1 = deer + leg, 2 = ... etc.
 	glm::quat player_base_rotation;
 
 	std::unique_ptr< Skeleton > enemy_skeleton;
-	std::unique_ptr< RiggedMesh > enemy_rig;
+	std::vector< std::unique_ptr< RiggedMesh > > enemy_rigs;
+	std::vector< Scene::Drawable * > enemy_drawables;
 	AnimationGraph< Skeleton::BoneTransform > enemy_graph =
 		AnimationGraph< Skeleton::BoneTransform >(
 			[](Skeleton::BoneTransform const &a,
@@ -62,6 +69,22 @@ struct PlayMode : Mode {
 
 	float enemy_mesh_scale = 1.0f;
 	glm::vec3 enemy_mesh_offset = glm::vec3(0.0f);
+
+	// Gate
+	std::unique_ptr< Skeleton > gate_skeleton;
+	AnimationGraph< Skeleton::BoneTransform > gate_graph =
+    AnimationGraph< Skeleton::BoneTransform >(
+        [](Skeleton::BoneTransform const &a,
+           Skeleton::BoneTransform const &b,
+           float t) {
+            Skeleton::BoneTransform out;
+            out.position = glm::mix(a.position, b.position, t);
+            out.rotation = glm::normalize(glm::slerp(a.rotation, b.rotation, t));
+            out.scale    = glm::mix(a.scale, b.scale, t);
+            return out;
+        });
+	std::unique_ptr< RiggedMesh > gate_rig;
+	bool gate_anim_playing = false;
 
 	// camera:
 	Camera *cam;
@@ -85,6 +108,8 @@ struct PlayMode : Mode {
 	float execution_range = 10.0f;       // excution area
 
 	// --- enemy patrol ---
+	enum EnemyState { ENEMY_STAND, ENEMY_WALK, ENEMY_BETWEEN };
+	EnemyState enemy_state = ENEMY_WALK;
 	std::vector< glm::vec3 > enemy_waypoints;
 	size_t enemy_wp_idx = 0;
 	float enemy_speed = 6.0f;		   // units/sec
@@ -124,7 +149,7 @@ struct PlayMode : Mode {
 	// Kill count & Dash skill unlock
 	int kill_count = 0;
 	bool dash_skill = false;
-	bool attraction_ability = false;  // unlocked after killing at least 2 enemies
+	bool attraction_ability = true;  // unlocked after killing at least 2 enemies
 	bool  dashing = false;
 	float dash_timer = 0.0f;       // remaining dash time (sec)
 	float dash_duration = 0.18f;   // how long a dash lasts
@@ -136,5 +161,8 @@ struct PlayMode : Mode {
 	std::vector<Sound::Sample const *> attraction_sounds; // <-- use raw pointers
 	std::mt19937 rng{123456u};       // simple RNG; you can seed with time if you want
 	float attraction_cooldown_timer = 0.0f;
-	float attraction_cooldown = 0.6f; // avoid accidental audio spam
+	float attraction_cooldown = 2.0f; // avoid accidental audio spam
+	std::vector<int> attraction_ids = {1, 2, 3, 4};
+	glm::vec3 pull_target = glm::vec3(0.0f);
+	bool being_pulled = false;
 };

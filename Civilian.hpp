@@ -16,7 +16,7 @@ struct Civilian {
 
 	Scene::Transform *transform = nullptr;
 	std::unique_ptr< Skeleton > skel;
-	std::unique_ptr< RiggedMesh > rig;
+	std::vector< std::unique_ptr< RiggedMesh > > rigs;
 
 	std::unique_ptr< AnimationBuffer< Skeleton::BoneTransform > > anim_buffer;
 	AnimationGraph< Skeleton::BoneTransform > graph{[](auto const &a, auto const &, float) { return a; }};
@@ -37,6 +37,10 @@ struct Civilian {
 	float radius = 0.6f;
 
 	std::mt19937 rng;
+	// --- NEW: attraction / pull-to-player state ---
+	glm::vec3 pull_target{0.0f, 0.0f, 0.0f};
+	bool being_pulled = false;
+	float pull_speed = 3.0f; // faster than normal wandering
 };
 
 inline float rand(std::mt19937 &rng, float min, float max) {
@@ -91,6 +95,74 @@ inline void civilian_set_state(Civilian &c, Civilian::State next) {
 }
 
 inline void civilian_update(Civilian &c, float elapsed) {
+	if (c.being_pulled) {
+		if (c.state != Civilian::WALK && c.state != Civilian::BETWEEN) {
+			civilian_set_state(c, Civilian::WALK);
+		}
+		
+		c.graph.update(elapsed * c.playback_speed);
+		
+		if (c.state == Civilian::BETWEEN) {
+			auto &states = c.graph.states;
+			auto *cur_state = c.graph.current_state;
+			auto *stand_to_walk_state = &states.find("StandToWalk")->second;
+			auto *walk_state = &states.find("Walk")->second;
+			
+			if (cur_state == stand_to_walk_state) {
+				float anim_length = cur_state->animation.get_anim_length();
+				const float epsilon = 0.001f;
+				if (c.graph.playback >= anim_length - epsilon) {
+					c.graph.current_state = walk_state;
+					c.state = Civilian::WALK;
+					c.graph.playback = 0.0f;
+					c.graph.keyframe_index = 0;
+				}
+			}
+		}
+		// Update all rigs
+		for (auto& rig : c.rigs) {
+			rig->update(elapsed);
+		}
+		
+		glm::vec3 pos3 = c.transform->position;
+		glm::vec2 pos(pos3.x, pos3.y);
+
+		glm::vec2 target_xy(c.pull_target.x, c.pull_target.y);
+		glm::vec2 to_target = target_xy - pos;
+		float dist = glm::length(to_target);
+
+		// stop when close enough to player
+		if (dist > 0.6f) {
+			glm::vec2 dir = to_target / dist;
+			glm::vec2 step = dir * c.pull_speed * elapsed;
+
+			// move civilian on x,y plane
+			c.transform->position.x += step.x;
+			c.transform->position.y += step.y;
+
+			// update velocity for rotation
+			c.velocity = step / std::max(elapsed, 1e-4f);
+
+			// rotate to face movement direction
+			if (glm::length(c.velocity) > 1e-3f) {
+				float angle = std::atan2(c.velocity.x, c.velocity.y);
+				glm::quat target_rot = glm::angleAxis(angle, glm::vec3(0, 0, 1)) * c.base_rotation;
+				c.transform->rotation = glm::slerp(
+					c.transform->rotation,
+					target_rot,
+					1.0f - std::exp(-6.0f * elapsed)
+				);
+			}
+		} else {
+			// reached player: stop pulling, resume normal AI with a short pause
+			c.being_pulled = false;
+			c.velocity = glm::vec2(0.0f);
+			c.pause_timer = rand(c.rng, 1.0f, 3.0f);
+		}
+
+		return; // skip normal wandering logic while being pulled
+	}
+
 	float prev_playback  = c.graph.playback;
 
 	// Apply per-civilian playback speed to differentiate animations
@@ -176,7 +248,7 @@ inline void civilian_update(Civilian &c, float elapsed) {
 				next = Civilian::WALK;
 				c.bumped = false;
 			} else {
-				if (r < 0.3f) {
+				if (r < 0.5f) {
 					next = Civilian::WALK;
 				}
 			}
@@ -204,7 +276,9 @@ inline void civilian_update(Civilian &c, float elapsed) {
 		}
 	}
 	
-	c.rig->update(elapsed);
+	for (auto& rig : c.rigs) {
+		rig->update(elapsed);
+	}
 
 	// Movement amount based on animation type
 	glm::vec2 pos(c.transform->position.x, c.transform->position.y);

@@ -19,8 +19,7 @@ How To Play:
 ```
 /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-meshes.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.pnct && /Applications/Blender.app/Contents/MacOS/Blender -y --background --python scenes/export-scene.py -- scenes/zoo_nolink.blend:Main dist/zoo_nolink.scene
 
-/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rigged_meshes.py -- scenes/zoo_nolink.blend:Main dist/Gate.pnct dist/Gate.infl
-/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rig.py          -- scenes/zoo_nolink.blend:Main dist/Gate.skel dist/Gate.anim
+/Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rigged_meshes.py -- scenes/gate.blend:Main dist/Gate.pnct dist/Gate.infl && /Applications/Blender.app/Contents/MacOS/Blender --background --python animations/export-rig.py          -- scenes/gate.blend:Main dist/Gate.skel dist/Gate.anim
 
 node Maekfile.js && dist/game
 ```
@@ -41,6 +40,16 @@ No Parking Sign Board: https://www.blenderkit.com/get-blenderkit/40bd752c-0163-4
 Iron gate: https://www.blenderkit.com/get-blenderkit/cc604c67-711c-4645-bdd6-4d8655dffdc1/
 Brick and Wroute Iron Fence Segment: https://www.blenderkit.com/get-blenderkit/7865ad3b-ae62-403e-80d4-99ea9fa49789/
 MPFB Blender extension for human assets: https://static.makehumancommunity.org/mpfb.html
+Mossy Rock: https://www.blenderkit.com/get-blenderkit/cd2d8180-31ef-4f9c-a42c-4bdd9155b632/
+Mossy Rock 2: https://www.blenderkit.com/get-blenderkit/b2f6f8b2-72d3-4444-9bcf-da74d10e0417/
+1993 Volvo 240 Old Rusty Car: https://www.blenderkit.com/get-blenderkit/73a0193a-f169-4d89-8f50-7f6a008f3009/
+Off-Road 4x4 vehicle mud: https://www.blenderkit.com/get-blenderkit/5e4301db-f419-40d5-830b-cb3f23cd8d1d/
+Forest Cabin: https://www.blenderkit.com/get-blenderkit/a1b23c3e-5e04-4ee5-8dc5-ce4016d0e90a/
+Small House: https://www.blenderkit.com/get-blenderkit/6f015242-11e7-45af-a02d-8a17c7b555e6/
+Fish Statue: https://www.blenderkit.com/get-blenderkit/c5430fcc-5e14-44f1-bd82-e4c5d1932408/
+Sculpture of an old angry bear: https://www.blenderkit.com/get-blenderkit/c8113ecf-17d1-44f7-b006-5256ac6547e1/
+Terracotta owl sculpture: https://www.blenderkit.com/get-blenderkit/0ce088d5-c86b-4719-b389-7d6441e5938f/
+Bear Sculpture: https://www.blenderkit.com/get-blenderkit/c4263680-39af-447d-8efb-0efd43cd7077/
 
 This game was built with [NEST](NEST.md).
 
