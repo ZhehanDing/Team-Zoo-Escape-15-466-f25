@@ -158,8 +158,8 @@ const game_names = [
 	maek.CPP('Collision.cpp'),
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('main.cpp'),
-	maek.CPP('SkinningLitColorTextureProgram.cpp'),
 	maek.CPP('SkinningProgram.cpp'),
+	maek.CPP('SkinningDeferredProgram.cpp'),
 	maek.CPP('LitColorTextureProgram.cpp'),
 	maek.CPP('ParticleProgram.cpp'),
 	//maek.CPP('ColorTextureProgram.cpp'),  //not used right now, but you might want it

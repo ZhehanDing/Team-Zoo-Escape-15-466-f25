@@ -16,8 +16,8 @@
 #include "Mesh.hpp"
 #include "RiggedMesh.hpp"
 #include "Skeleton.hpp"
-#include "SkinningLitColorTextureProgram.hpp"
 #include "SkinningProgram.hpp"
+#include "SkinningDeferredProgram.hpp"
 #include "gl_errors.hpp"
 #include "load_save_png.hpp"
 #include "data_path.hpp"
@@ -275,8 +275,8 @@ void make_civilian(
 		Scene::Drawable &drawable = playmode->scene.drawables.back();
 		playmode->civilian_drawables.push_back(&drawable);
 		
-		drawable.pipeline = skinning_lit_color_texture_program_pipeline;
-		drawable.pipeline.vao = c.rigs.back()->make_vao_for_program(skinning_lit_color_texture_program->program);
+		drawable.pipeline = skinning_deferred_program_pipeline;
+		drawable.pipeline.vao = c.rigs.back()->make_vao_for_program(skinning_deferred_program->program);
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
@@ -332,6 +332,7 @@ void make_civilian(
 		auto rig_ptr = c.rigs.back().get();
 		drawable.pipeline.set_uniforms = [rig_ptr]() {
 			rig_ptr->bind_pose_ubo();
+			glUniform1f(skinning_deferred_program->ROUGHNESS_float, 0.5f);
 		};
 	}
 	
@@ -432,8 +433,8 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		scene.drawables.emplace_back(enemy);
 		Scene::Drawable &drawable = scene.drawables.back();
 		enemy_drawables.push_back(&drawable);
-		drawable.pipeline = skinning_lit_color_texture_program_pipeline;
-		drawable.pipeline.vao = enemy_rigs.back()->make_vao_for_program(skinning_lit_color_texture_program->program);
+		drawable.pipeline = skinning_deferred_program_pipeline;
+		drawable.pipeline.vao = enemy_rigs.back()->make_vao_for_program(skinning_deferred_program->program);
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
@@ -483,6 +484,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		auto rig_ptr = enemy_rigs.back().get();
 		drawable.pipeline.set_uniforms = [rig_ptr]() {
 			rig_ptr->bind_pose_ubo();
+			glUniform1f(skinning_deferred_program->ROUGHNESS_float, 0.5f);
 		};
 	}
 
@@ -1383,12 +1385,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glUniform1i(particle_program->LIGHT_TYPE_int, 1);
 	glUniform3fv(particle_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
 	glUniform3fv(particle_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));	
-	glUseProgram(0);
-
-	glUseProgram(skinning_lit_color_texture_program->program);
-	glUniform1i(skinning_lit_color_texture_program->LIGHT_TYPE_int, 1); // hemisphere light
-	glUniform3fv(skinning_lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, -1.0f)));
-	glUniform3fv(skinning_lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
 	glUseProgram(0);
 
 	//--- draw geometry to framebuffer ---
