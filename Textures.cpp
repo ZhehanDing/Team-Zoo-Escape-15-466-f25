@@ -54,6 +54,8 @@ const std::vector<NamedTexture> named_textures = {
     // Animals
     {"Tyriese_Miller_C_Deer_Idle:body", "textures/deer_skin_light.png"},
     {"Tyriese_Miller_C_Deer_Idle:antler", "textures/bone.png"},
+    {"HG_Baggy_Jeans", "textures/Dwain.001_HG_Baggy_Jeans.002_base color.png"},
+    {"HG_Suede_Sneakers_Male", "textures/Dwain.001_HG_Suede_Sneakers_Male.002_base color.png"},
     {"Deer Behind Fence", "textures/deer_skin_plain.png"},
     {"Dead Deer", "textures/deer_skin_spotted.png"},
     {"Rat", "textures/rat.png"},
