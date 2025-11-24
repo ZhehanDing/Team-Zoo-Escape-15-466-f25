@@ -73,6 +73,7 @@ struct PlayMode : Mode {
 	glm::vec3 enemy_mesh_offset = glm::vec3(0.0f);
 
 	// Gate
+	std::unique_ptr< RiggedMesh > gate_rig;
 	bool gate_can_open = false;
 	bool gate_anim_playing = false;
 	float gate_rot_t = 0.0f;
@@ -116,6 +117,7 @@ struct PlayMode : Mode {
 	glm::quat enemy_base_rotation;	   // remember original facing
 	// Enemy vision
 	bool being_watched = false; // updated in update(), read in draw()
+	Civilian *watching_civilian = nullptr;
 	bool watched_latched = false;
 	float enemy_view_distance = 10.0f; // max detection range (units)
 	float enemy_fov_deg = 70.0f;	   // vision cone (full angle)
@@ -159,6 +161,7 @@ struct PlayMode : Mode {
 	glm::vec3 dash_dir = glm::vec3(0.0f); // world-space direction of dash
 	//
 	std::vector<Sound::Sample const *> attraction_sounds; // <-- use raw pointers
+	std::vector<int> attraction_ids = {1, 2, 3, 4};
 	std::mt19937 rng{123456u};       // simple RNG; you can seed with time if you want
 	float attraction_cooldown_timer = 0.0f;
 	float attraction_cooldown = 0.6f; // avoid accidental audio spam

@@ -37,6 +37,11 @@ struct Civilian {
 	float radius = 0.6f;
 
 	std::mt19937 rng;
+	// --- NEW: attraction / pull-to-player state ---
+	glm::vec3 pull_target{0.0f, 0.0f, 0.0f};
+	bool being_pulled = false;
+	float pull_speed = 3.0f; // faster than normal wandering
+	bool watching_player = false;
 };
 
 inline float rand(std::mt19937 &rng, float min, float max) {
