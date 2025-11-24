@@ -1,0 +1,1460 @@
+#include "PlayMode.hpp"
+#include <algorithm>
+#include <cmath>
+// #include "LitColorTextureProgram.hpp"
+#include "BasicMaterialDeferredProgram.hpp"
+#include "LightMeshes.hpp"
+#include "CopyToScreenProgram.hpp"
+#include "ParticleProgram.hpp"
+<<<<<<< HEAD
+#include <memory>
+=======
+#include "Textures.hpp"
+#include "Collision.hpp"
+
+>>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
+#include "Animation.hpp"
+#include "DrawLines.hpp"
+#include "Load.hpp"
+#include "Mesh.hpp"
+#include "RiggedMesh.hpp"
+#include "Skeleton.hpp"
+#include "SkinningProgram.hpp"
+#include "gl_errors.hpp"
+#include "load_save_png.hpp"
+#include "data_path.hpp"
+#include "check_fb.hpp"
+
+#include <glm/gtc/type_ptr.hpp>
+
+#include <random>
+
+GLuint zoo_for_basic_material_deferred_object = 0;
+GLuint light_for_basic_material_deferred_light = 0;
+// GLuint zoo_meshes_for_lit_color_texture_program = 0;
+
+Load< MeshBuffer > zoo_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	MeshBuffer const *ret = new MeshBuffer(data_path("zoo_nolink.pnct"));
+	zoo_for_basic_material_deferred_object = ret->make_vao_for_program(basic_material_deferred_object_program->program);
+	return ret;
+});
+Load< Sound::Sample > attraction_voice_1(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Sound1.wav"));
+});
+Load< Sound::Sample > attraction_voice_2(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Sound2.wav"));
+});
+Load< Sound::Sample > attraction_voice_3(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Sound3.wav"));
+});
+Load< Sound::Sample > attraction_voice_4(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Sound4.wav"));
+});
+
+Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
+	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
+	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
+
+	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
+
+		scene.drawables.emplace_back(transform);
+		Scene::Drawable &drawable = scene.drawables.back();
+
+		// drawable.pipeline = lit_color_texture_program_pipeline;
+		drawable.pipeline = basic_material_deferred_object_program_pipeline;
+
+		drawable.pipeline.vao = zoo_for_basic_material_deferred_object;
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;
+
+		float roughness = 1.0f;
+<<<<<<< HEAD
+		if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
+			roughness = (transform->position.y + 10.0f) / 18.0f;
+		}
+		drawable.pipeline.set_uniforms = [roughness](){
+=======
+		// if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
+		// 	roughness = (transform->position.y + 10.0f) / 18.0f;
+		// }
+
+		// printf("-- Transform name: %s\n", transform->name.c_str());
+		for (size_t i = 0; i < named_textures.size(); ++i)
+		{
+			// printf("Checking prefix: %s\n", named_textures[i].prefix.c_str());
+			if (transform->name.rfind(named_textures[i].prefix, 0) == 0)
+			{
+				if (i < textures->size())
+				{
+					// printf("Assigning texture %s to object %s\n", named_textures[i].filename.c_str(), transform->name.c_str());
+					drawable.pipeline.textures[0].texture = (*textures)[i];
+					drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+				}
+				break;
+			}
+		}
+
+		bool is_sky = (transform->name == "Sky");
+		drawable.pipeline.set_uniforms = [roughness, is_sky]()
+		{
+>>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
+			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
+			glUniform1i(basic_material_deferred_object_program->SKY_MODE_int,
+						is_sky ? 1 : 0);
+		};
+		});
+
+<<<<<<< HEAD
+	return ret;
+});
+=======
+		return ret; });
+>>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
+
+// Helper: maintain a framebuffer to hold rendered geometry
+struct FB {
+	// object data gets stored in these textures:
+	GLuint position_tex = 0;
+	GLuint normal_roughness_tex = 0;
+	GLuint albedo_tex = 0;
+	
+	//output image gets written to this texture:
+	GLuint output_tex = 0;
+
+	//depth buffer is shared between objects + lights pass:
+	GLuint depth_rb = 0;
+
+	GLuint objects_fb = 0; //(position, normal, albedo) + depth
+	GLuint lights_fb = 0;  //(output) + depth
+
+	glm::uvec2 size = glm::uvec2(0);
+
+	void resize(glm::uvec2 const &drawable_size) {
+		if (drawable_size == size) return;
+		size = drawable_size;
+
+		// helper to allocate a texture:
+		auto alloc_tex = [&](GLuint &tex, GLenum internal_format) {
+			if (tex == 0) glGenTextures(1, &tex);
+			glBindTexture(GL_TEXTURE_2D, tex);
+			glTexImage2D(GL_TEXTURE_2D, 0, internal_format, size.x, size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glBindTexture(GL_TEXTURE_2D, 0);
+		};
+
+		// set up position_tex as a 32-bit floating point RGB texture:
+		alloc_tex(position_tex, GL_RGB32F);
+
+		// set up normal_roughness_tex as a 16-bit floating point RGBA texture:
+		alloc_tex(normal_roughness_tex, GL_RGBA16F);
+
+		// set up albedo_tex as an 8-bit fixed point RGBA texture:
+		alloc_tex(albedo_tex, GL_RGBA8);
+
+		// set up output_tex as an 8-bit fixed point RGBA texture:
+		alloc_tex(output_tex, GL_RGBA8);
+
+		// if depth_rb does not have a name, name it:
+		if (depth_rb == 0) glGenRenderbuffers(1, &depth_rb);
+		// set up depth_rb as a 24-bit fixed-point depth buffer:
+		glBindRenderbuffer(GL_RENDERBUFFER, depth_rb);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size.x, size.y);
+		glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+		// if objects framebuffer doesn't have a name, name it and attach textures:
+		if (objects_fb == 0) {
+			glGenFramebuffers(1, &objects_fb);
+			// set up framebuffer: (don't need to do when resizing)
+			glBindFramebuffer(GL_FRAMEBUFFER, objects_fb);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, position_tex, 0);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, normal_roughness_tex, 0);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, albedo_tex, 0);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
+			GLenum bufs[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+			glDrawBuffers(3, bufs);
+			check_fb();
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+
+		// if lights-drawing framebuffer doesn't have a name, name it and attach textures:
+		if (lights_fb == 0) {
+			glGenFramebuffers(1, &lights_fb);
+			// set up framebuffer: (don't need to do when resizing)
+			glBindFramebuffer(GL_FRAMEBUFFER, lights_fb);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, output_tex, 0);
+			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
+			GLenum bufs[1] = {GL_COLOR_ATTACHMENT0};
+			glDrawBuffers(1, bufs);
+			check_fb();
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+	}
+} fb;
+
+// -- Meshes, skeletons, animations, and bone influences --
+// Human
+Load< MeshBuffer > human_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	return new MeshBuffer(data_path("human.pnct"));
+});
+
+Load< BoneInfluenceBuffer > human_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
+	return new BoneInfluenceBuffer(data_path("human.infl"));
+});
+
+Load< SkeletonBuffer > human_skeletons(LoadTagDefault, []() -> SkeletonBuffer const * {
+	return new SkeletonBuffer(data_path("human.skel"));
+});
+
+Load< AnimationBuffer< Skeleton::BoneTransform > > human_animations(LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
+	return new AnimationBuffer< Skeleton::BoneTransform >(data_path("human.anim"));
+});
+
+
+static const char *civilian_mesh_names[] = {
+	"civilian_base",
+	"bob01",
+	"eyebrow001",
+	"eyelashes01",
+	"high-poly",
+	"male_casualsuit06",
+	"shoes_monk_strap_female",
+	"teeth_base",
+	"tongue01",
+};
+
+GLuint civilian_for_basic_material_deferred_object = 0;
+Load< MeshBuffer > civilian_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	MeshBuffer const *ret = new MeshBuffer(data_path("civilian.pnct"));
+	civilian_for_basic_material_deferred_object =
+		ret->make_vao_for_program(basic_material_deferred_object_program->program);
+	return ret;
+});
+
+PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
+	//get pointers to transforms for convenience:
+	for (auto &transform : scene.transforms) {
+		if (transform.name == "Player") player = &transform;
+		if (transform.name == "Enemy") enemy = &transform;
+		if (transform.name == "Final_Deer") final_deer = &transform;
+		if (transform.name == "Final_Deer Leg") {
+			final_deer_leg = &transform;
+			transform.scale = glm::vec3(0.0f); // set invisible initially
+		}
+		if (transform.name == "Sky") sky = &transform;
+		if (transform.name == "Gate") gate = &transform;
+		if (transform.name == "Gate_L") gate_L = &transform;
+		if (transform.name == "Gate_R") gate_R = &transform;
+		if (transform.name == "Collider_Gate") gate_collider = &transform;
+		if (transform.name == "Collider_Deer Fence") deer_fence_collider = &transform;
+		if (transform.name == "Collider_Zoo Fence Near") zoo_fence_near_collider = &transform;
+		if (transform.name == "Collider_Zoo Fence Far") zoo_fence_far_collider = &transform;
+		// if (transform.name == "Small House Main") small_house = &transform;
+	
+		// if (transform.name.rfind("Wood Cylinder", 0) == 0)
+		// {
+		// 	cylinders.push_back(&transform);
+		// 	// printf("Found tree: %s\n", transform.name.c_str());
+		// }
+	}
+	if (player == nullptr) throw std::runtime_error("Player not found.");
+	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
+	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
+	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
+	if (sky == nullptr) throw std::runtime_error("sky not found.");
+	if (gate == nullptr) throw std::runtime_error("gate not found.");
+	if (gate_L == nullptr) throw std::runtime_error("gate_L not found.");
+	if (gate_R == nullptr) throw std::runtime_error("gate_R not found.");
+	if (gate_collider == nullptr) throw std::runtime_error("gate_collider not found.");
+	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
+	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
+	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
+
+	player_base_rotation = player->rotation;
+
+	// for (auto &d : scene.drawables) {
+	// 	if (d.transform == enemy) {
+	// 		d.pipeline.count = 0; // hide old enemy mesh
+	// 	}
+	// }
+
+	// -- Handle skeleton --
+	// Enemy
+	Mesh const &human_mesh = human_meshes->lookup("base.001");
+	Skeleton const &human_skel = human_skeletons->lookup("Human.rigify");
+
+	enemy_skeleton = std::make_unique< Skeleton >(human_skel);
+	auto g = [](const Skeleton::BoneTransform &a,
+				const Skeleton::BoneTransform &b,
+				float t) {
+		Skeleton::BoneTransform out;
+		out.position = glm::mix(a.position, b.position, t);
+		out.rotation = glm::normalize(glm::slerp(a.rotation, b.rotation, t));
+		out.scale = glm::mix(a.scale, b.scale, t);
+		return out;
+	};
+	
+	enemy_graph = AnimationGraph< Skeleton::BoneTransform >(g);
+	enemy_graph.add_state(human_animations->lookup("Walk"));
+	enemy_rig = std::make_unique< RiggedMesh >(
+		human_meshes->buffer, human_infls->buffer, human_mesh, *enemy_skeleton, &enemy_graph);
+
+	auto make_civilian = [&](const glm::vec3 &location) {
+		scene.transforms.emplace_back();
+		Scene::Transform *transform = &scene.transforms.back();
+		transform->position = location;
+		transform->rotation = glm::quat(1, 0, 0, 0);
+		transform->scale = glm::vec3(1.1f);
+
+		for (const char *mesh_name : civilian_mesh_names) {
+			Mesh const *mesh = &civilian_meshes->lookup(mesh_name);
+			scene.drawables.emplace_back(transform);
+			Scene::Drawable &dr = scene.drawables.back();
+			dr.pipeline = basic_material_deferred_object_program_pipeline;
+			dr.pipeline.vao = civilian_for_basic_material_deferred_object;
+			dr.pipeline.type = mesh->type;
+			dr.pipeline.start = mesh->start;
+			dr.pipeline.count = mesh->count;
+		}
+
+		Civilian c;
+		c.transform = transform;
+		c.base_rotation = transform->rotation;
+		c.start_pos = glm::vec2(location.x, location.y);
+		civilians.emplace_back(std::move(c));
+	};
+
+	// populate civilians
+	std::mt19937 civilians_rng{std::random_device{}()};
+	glm::vec3 center = glm::vec3(-40.0f, -30.0f, 0.0f);
+	for (int i = 0; i < 4; i++) {
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+
+		make_civilian(center + glm::vec3(x, y, 0.3f));
+	}
+	center = glm::vec3(-5.0f, 0.0f, 0.0f);
+	for (int i = 0; i < 4; i++) {
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+
+		make_civilian(center + glm::vec3(x, y, 0.3f));
+	}
+	center = glm::vec3(0.0f, 40.0f, 0.0f);
+	for (int i = 0; i < 4; i++) {
+		float x = rand(civilians_rng, -10.0f, 10.0f);
+		float y = rand(civilians_rng, -10.0f, 10.0f);
+
+		make_civilian(center + glm::vec3(x, y, 0.3f));
+	}
+
+	// -- populate rigged mesh --
+	// Enemy
+	scene.drawables.emplace_back(enemy);
+	Scene::Drawable &enemy_drawable = scene.drawables.back();
+	enemy_drawable.pipeline = skinning_program_pipeline;
+	enemy_drawable.pipeline.vao =
+		enemy_rig->make_vao_for_program(skinning_program->program);
+	enemy_drawable.pipeline.type = enemy_rig->mesh.type;
+	enemy_drawable.pipeline.start = enemy_rig->mesh.start;
+	enemy_drawable.pipeline.count = enemy_rig->mesh.count;
+
+	// get pointer to camera for convenience:
+	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
+	camera = &scene.cameras.front();
+	base_fovy = camera->fovy;
+
+	cam = new Camera(camera, player);
+	cam->set_orbit_offset_from_anchor(glm::vec3(0.f, 0.f, 2.f));
+	cam->set_initial_look_degrees(-90.f, 180.f, 0.f); /* initial camera look: pitch, roll, yaw */
+	cam->set_sensitivity(1.5f);
+	cam->set_max_distance_from_camera_center(5.f);
+	// cam->set_pitch_range(-(float)M_PI, 0.f); //default
+
+	enemy_base_rotation = enemy->rotation;
+
+	// build a simple square/loop around the enemy's start position:
+	glm::vec3 e0 = enemy->position;
+	float R = 6.0f; // patrol radius
+	enemy_waypoints = {
+		e0 + glm::vec3(0.0f, R, 0.0f),
+		e0 + glm::vec3(R, 0.0f, 0.0f),
+		e0 + glm::vec3(0.0f, -R, 0.0f),
+		e0 + glm::vec3(-R, 0.0f, 0.0f)};
+	enemy_wp_idx = 0;
+	enemy_wait_timer = 0.0f;
+	/*
+	{
+		std::vector<glm::u8vec4> pixels;
+		glm::uvec2 size(0);
+
+		// 把 deer UI.png 放到可被 data_path() 找到的位置（和 .scene/.pnct 同级 assets）
+		// 如果你要临时从绝对路径读，也可直接写全路径。
+		load_png(data_path("deer UI.png"), &size, &pixels, LowerLeftOrigin);
+		deer_ui_size = size; // 记录像素尺寸
+
+		glGenTextures(1, &deer_ui_tex);
+		glBindTexture(GL_TEXTURE_2D, deer_ui_tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // UI 不用 mipmap
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
+			int(size.x), int(size.y), 0,
+			GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+
+	// ---------- NEW: 为屏幕空间四边形准备 VAO/VBO ----------
+	{
+		glGenVertexArrays(1, &deer_ui_vao);
+		glGenBuffers(1, &deer_ui_vbo);
+
+		glBindVertexArray(deer_ui_vao);
+		glBindBuffer(GL_ARRAY_BUFFER, deer_ui_vbo);
+
+		// 顶点格式：pos(x,y), uv(u,v) — 4 个 float
+		// 先占位 6 个顶点（两个三角形），每帧只更新数据
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_DRAW);
+
+		// 取用 LitColorTextureProgram 的属性位置：
+		GLint pos_loc = glGetAttribLocation(lit_color_texture_program->program, "Position");
+		GLint uv_loc  = glGetAttribLocation(lit_color_texture_program->program, "TexCoord");
+
+		// 有些版本 Position 是 vec4，这里以 vec2 启用即可（剩余分量由 shader 补 0/1）
+		glEnableVertexAttribArray(GLuint(pos_loc));
+		glVertexAttribPointer(GLuint(pos_loc), 2, GL_FLOAT, GL_FALSE, sizeof(float)*4, (GLvoid*)0);
+
+		glEnableVertexAttribArray(GLuint(uv_loc));
+		glVertexAttribPointer(GLuint(uv_loc), 2, GL_FLOAT, GL_FALSE, sizeof(float)*4, (GLvoid*)(sizeof(float)*2));
+
+		// 给 Normal/Color 设置常量值，避免 shader 里参与光照时报 0：
+		GLint n_loc = glGetAttribLocation(lit_color_texture_program->program, "Normal");
+		if (n_loc >= 0) { glDisableVertexAttribArray(GLuint(n_loc)); glVertexAttrib3f(GLuint(n_loc), 0.f, 0.f, 1.f); }
+		GLint c_loc = glGetAttribLocation(lit_color_texture_program->program, "Color");
+		if (c_loc >= 0) { glDisableVertexAttribArray(GLuint(c_loc)); glVertexAttrib3f(GLuint(c_loc), 1.f, 1.f, 1.f); }
+
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+	}*/
+}
+
+void PlayMode::trigger_game_over() {
+	if (game_over) return; // idempotent
+	
+	game_over = true;
+}
+
+void PlayMode::trigger_game_success() {
+	if (game_success) return; // idempotent
+	game_success = true;
+}
+
+PlayMode::~PlayMode() {
+	/*	// NEW: 释放 deer UI 资源
+	if (deer_ui_tex) glDeleteTextures(1, &deer_ui_tex);
+	if (deer_ui_vbo) glDeleteBuffers(1, &deer_ui_vbo);
+	if (deer_ui_vao) glDeleteVertexArrays(1, &deer_ui_vao);
+	*/
+
+
+}
+
+bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
+
+	if (evt.type == SDL_EVENT_KEY_DOWN) {
+		if (evt.key.key == SDLK_ESCAPE) {
+			SDL_SetWindowRelativeMouseMode(Mode::window, false);
+			return true;
+<<<<<<< HEAD
+		}else if (evt.key.key == SDLK_R) {
+			// restart the game with a fresh PlayMode
+			if (game_over) {
+				Mode::set_current(std::make_shared< PlayMode >());
+			}
+			return true;
+=======
+		} else if (game_success) {
+			return false;
+>>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
+		} else if (evt.key.key == SDLK_A) {
+			left.downs += 1;
+			left.pressed = true;
+			return true;
+		} else if (evt.key.key == SDLK_D) {
+			right.downs += 1;
+			right.pressed = true;
+			return true;
+		} else if (evt.key.key == SDLK_W) {
+			up.downs += 1;
+			up.pressed = true;
+			return true;
+		} else if (evt.key.key == SDLK_S) {
+			down.downs += 1;
+			down.pressed = true;
+			return true;
+		}else if (evt.key.key == SDLK_SPACE) {
+			// Start dash if unlocked, not already dashing, and off cooldown
+			if (dash_skill && !dashing && dash_cooldown_timer <= 0.0f && !game_over) {
+				// Dash direction: camera-forward (on ground plane)
+				glm::mat4x3 cam_frame = player->make_parent_from_local();
+				glm::vec3 frame_forward = -cam_frame[1]; // consistent with your WASD forward
+				frame_forward.z = 0.0f;
+				if (glm::dot(frame_forward, frame_forward) < 1e-6f) frame_forward = glm::vec3(0.0f, 1.0f, 0.0f);
+				dash_dir = glm::normalize(frame_forward);
+
+				dashing = true;
+				dash_timer = dash_duration;
+				dash_cooldown_timer = dash_cooldown;
+
+				// Optional: slight FOV punch-in while dashing
+				target_fovy = base_fovy * 2.1f;
+			}
+			return true;
+		}else if (evt.key.key == SDLK_G) {
+			if (attraction_ability && attraction_cooldown_timer <= 0.0f && !game_over) {
+
+				// 1. Pick random ID from list 1–4
+				std::uniform_int_distribution<int> dist(0, int(attraction_ids.size()) - 1);
+				int id = attraction_ids[dist(rng)];
+
+				// 2. Play sound depending on ID
+				switch (id) {
+					case 1:
+						Sound::play(*attraction_voice_1, 1.0f, 1.0f);
+						break;
+					case 2:
+						Sound::play(*attraction_voice_2, 1.0f, 1.0f);
+						break;
+					case 3:
+						Sound::play(*attraction_voice_3, 1.0f, 1.0f);
+						break;
+					case 4:
+						Sound::play(*attraction_voice_4, 1.0f, 1.0f);
+						break;
+				}
+				for (auto &civ : civilians) {
+					if (!civ.transform) continue;
+
+					float dist_xy = glm::length(
+						glm::vec2(
+							civ.transform->position.x - player->position.x,
+							civ.transform->position.y - player->position.y
+						)
+					);
+
+					// choose radius you like (25 is pretty big)
+					if (dist_xy < 25.0f) {
+						civ.being_pulled = true;
+						civ.pull_target = player->position;
+					}
+				}				
+				// cooldown
+				attraction_cooldown_timer = attraction_cooldown;
+
+				// --- Make nearby civilians walk toward the player ---
+				for (auto &civ : civilians) {
+					// range: adjust 20.0f if needed
+					float dist = glm::length(player->position - civ.transform->position);
+					if (dist < 25.0f) {
+						civ.being_pulled = true;
+						civ.pull_target = player->position;   // goal
+					}
+				}
+			}
+			return true;
+		}
+		else if (evt.key.key == SDLK_P && !gate_can_open)
+		{
+    		gate_anim_playing = true; 
+			gate_can_open = true; // TODO: need a condition for this to be true
+
+			gate_rot_t = 0.0f;
+			glm::vec3 z_axis(0.0f, 0.0f, 1.0f);
+
+			gate_L_start = gate_L->rotation;
+			gate_R_start = gate_R->rotation;
+
+			float deg = 135.0f;
+			gate_L_end = gate_L_start * glm::angleAxis(glm::radians(deg), z_axis);
+			gate_R_end = gate_R_start * glm::angleAxis(glm::radians(-deg), z_axis);
+
+			float deg_phase2_L = -7.0f;
+			float deg_phase2_R =  7.0f;
+
+			gate_L_final = gate_L_end * glm::angleAxis(glm::radians(deg_phase2_L), z_axis);
+			gate_R_final = gate_R_end * glm::angleAxis(glm::radians(deg_phase2_R), z_axis);
+			
+			return true;
+		}
+	} else if (evt.type == SDL_EVENT_KEY_UP) {
+		if (evt.key.key == SDLK_A) {
+			left.pressed = false;
+			return true;
+		} else if (evt.key.key == SDLK_D) {
+			right.pressed = false;
+			return true;
+		} else if (evt.key.key == SDLK_W) {
+			up.pressed = false;
+			return true;
+		} else if (evt.key.key == SDLK_S) {
+			down.pressed = false;
+			return true;
+		}
+	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+		if (SDL_GetWindowRelativeMouseMode(Mode::window) == false) {
+			SDL_SetWindowRelativeMouseMode(Mode::window, true);
+			return true;
+		}
+		if (evt.button.button == SDL_BUTTON_RIGHT) {
+			// Toggle ON:
+			focus_mode = true;
+			stalking = true;
+			player_speed_factor = 0.2f;		// slow to 50%
+			target_fovy = base_fovy * 0.7f; // zoom in a bit
+			return true;
+		} else if (evt.button.button == SDL_BUTTON_LEFT) {
+			if (execution_mode && execution_target) {
+
+				// Distance calculation
+				glm::vec3 player_pos = camera->transform->make_world_from_local()[3];
+				glm::vec3 civ_pos    = execution_target->make_world_from_local()[3];
+
+				float dist = glm::length(civ_pos - player_pos);
+				if (dist <= execution_range) {
+					// === EXECUTION SUCCESS ON CIVILIAN ===
+
+					execution_mode = false;
+					stalk_charge = 0.0f;
+
+					++kill_count;
+
+					// hide the civilian visually
+					execution_target->scale = glm::vec3(0.0f);
+					execution_target->position.z = -100.0f;
+
+					// clear current target so we don't keep reusing it
+					execution_target = nullptr;
+					if (kill_count >= 1) {
+						dash_skill = true;
+					}
+
+					// keep your deer_stage / reward logic as-is:
+					if (kill_count >= 2) {
+						attraction_ability = true;
+					}
+
+					if (deer_stage == 0) {
+						final_deer->scale = glm::vec3(0.0f);  // hide original deer
+						final_deer_leg->scale = glm::vec3(0.7f);
+						deer_stage = 1;
+					}
+
+					return true;
+				}
+				else
+				{
+					// Not in distance
+					return true;
+				}
+			}
+		}
+	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+		if (evt.button.button == SDL_BUTTON_RIGHT) {
+			// Toggle OFF:
+			focus_mode = false;
+			stalking = false;
+			player_speed_factor = 1.0f;
+			target_fovy = base_fovy * 2.1f; // restore zoom
+			return true;
+		}
+	} else if (evt.type == SDL_EVENT_MOUSE_MOTION) {
+		if (SDL_GetWindowRelativeMouseMode(Mode::window) == true) {
+			glm::vec2 motion = glm::vec2(evt.motion.xrel / float(window_size.y),
+										 -evt.motion.yrel / float(window_size.y));
+
+			cam->update_camera(motion * camera->fovy);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void PlayMode::update(float elapsed) {
+	if (game_over) {
+		// Optional: keep camera/UI effects, but block gameplay logic
+		// camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
+		return;
+	}
+
+	// --- Dash timers ---
+	if (dash_cooldown_timer > 0.0f) {
+		dash_cooldown_timer = std::max(0.0f, dash_cooldown_timer - elapsed);
+	}
+	if (dashing) {
+		dash_timer -= elapsed;
+		if (dash_timer <= 0.0f) {
+			dashing = false;
+			target_fovy = base_fovy; // restore zoom after dash
+		}
+	}
+	if (attraction_cooldown_timer > 0.0f) {
+    attraction_cooldown_timer = std::max(0.0f, attraction_cooldown_timer - elapsed);
+	}
+
+	// --- Enemy collapse animation (after execution) ---
+	if (enemy && enemy_collapsing) {
+		enemy_collapse_t += elapsed;
+		float t = enemy_collapse_t / enemy_collapse_duration;
+		if (t > 1.0f) t = 1.0f;
+
+		// simple slerp from standing to “lying” pose
+		enemy->rotation = glm::slerp(enemy_collapse_start, enemy_collapse_end, t);
+
+		if (t >= 1.0f) {
+			enemy_collapsing = false; // finished collapsing
+		}
+	}
+	// animate
+	enemy->scale = glm::vec3(1.5f);
+	// enemy_graph.update(elapsed);
+	enemy_rig->update(elapsed);
+
+	if (gate_anim_playing)  {
+		gate_rot_t += elapsed;
+		float percent_played = gate_rot_t / (gate_rot_duration_1 + gate_rot_duration_2);
+		float phase1_end = gate_rot_duration_1 / (gate_rot_duration_1 + gate_rot_duration_2);
+
+		if (percent_played < phase1_end)
+		{
+			// Open
+			float t1 = percent_played / phase1_end; // 0..1
+			gate_L->rotation = glm::slerp(gate_L_start, gate_L_end, t1);
+			gate_R->rotation = glm::slerp(gate_R_start, gate_R_end, t1);
+		}
+		else
+		{
+			// Swing back a little
+			float t2 = (percent_played - phase1_end) / (1.0f - phase1_end); // 0..1 over second 6 seconds
+			if (t2 > 1.0f)
+				t2 = 1.0f;
+
+			gate_L->rotation = glm::slerp(gate_L_end, gate_L_final, t2);
+			gate_R->rotation = glm::slerp(gate_R_end, gate_R_final, t2);
+		}
+
+		// stop after total duration
+		if (percent_played >= 1.0f)
+		{
+			gate_anim_playing = false;
+		}
+	}
+
+	camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
+
+	// --- Player movement (WASD, relative to camera) ---
+	{
+		if (dashing)
+		{
+			player->position += dash_dir * dash_speed * elapsed;
+		}
+		else
+		{
+			constexpr float PlayerSpeed = 30.0f;
+			glm::vec2 move = glm::vec2(0.0f);
+			if (left.pressed && !right.pressed)
+				move.x = -1.0f;
+			if (!left.pressed && right.pressed)
+				move.x = 1.0f;
+			if (down.pressed && !up.pressed)
+				move.y = -1.0f;
+			if (!down.pressed && up.pressed)
+				move.y = 1.0f;
+
+			if (move != glm::vec2(0.0f))
+				move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
+
+			glm::mat4x3 frame = player->make_parent_from_local();
+			glm::vec3 frame_right = -frame[0];
+			glm::vec3 frame_forward = -frame[1];
+
+			if (move != glm::vec2(0.0f))
+			{
+				glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
+				// printf("Trying move to: %.2f, %.2f, %.2f\n", new_pos.x, new_pos.y, new_pos.z);
+
+				CollisionHits hits = query_world_collisions(
+					new_pos,
+					gate_can_open ? nullptr : gate_collider,
+					deer_fence_collider,
+					zoo_fence_near_collider,
+					zoo_fence_far_collider);
+
+				if (hits.escaped())
+				{
+					trigger_game_success();
+				}
+				else if (!hits.any())
+				{
+					player->position = new_pos;
+				}
+			}
+		}
+	}
+
+	// --- Enemy on-screen check (clip-space) ---
+	enemy_on_screen = false;
+	execution_target = nullptr;
+	if (!civilians.empty()) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+		// pick the first civilian that is on-screen, or tweak to pick the closest
+		for (auto &civilian : civilians) {
+			// NOTE: adjust this line to however your Civilian stores its transform.
+			// e.g. if Civilian has `Scene::Transform *transform;`, this is correct:
+			Scene::Transform *t = civilian.transform;
+			if (!t) continue;
+
+			glm::vec3 c_world = t->make_world_from_local()[3];
+			glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.0f);
+			if (clip.w <= 0.0f) continue;
+
+			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
+			bool on_screen =
+				(ndc.x >= -1.0f && ndc.x <= 1.0f &&
+				ndc.y >= -1.0f && ndc.y <= 1.0f);
+
+			if (on_screen) {
+				enemy_on_screen = true;           // reused flag name
+				execution_target = t;             // remember which civilian we’re aiming at
+				break;                            // stop at the first on-screen civilian
+			}
+		}
+	}
+
+	// --- Stalk bar charge/decay (depends on enemy on-screen visibility) ---
+	if (stalking && enemy_on_screen && enemy_visible) {
+		stalk_charge += stalk_charge_rate * elapsed;
+		if (stalk_charge > 1.0f) {
+			stalk_charge = 1.0f;
+            execution_mode = true;
+		}
+	} 
+
+	// --- Enemy sensing: FOV + distance (+ optional LOS hook) ---
+	//2025/11/22 update
+	being_watched = false;
+	watching_civilian = nullptr;
+	for (auto &civ : civilians) {
+		civ.watching_player = false;
+	}
+
+	if (player) {
+		for (auto &civ : civilians) {
+			if (!civ.transform) continue;
+
+			glm::mat4x3 c_world = civ.transform->make_world_from_local();
+			glm::vec3 c_pos     = c_world[3];
+			glm::vec3 c_forward = -glm::vec3(c_world[1]); // -Y is "forward"
+
+			glm::vec3 to_player3 = player->position - c_pos;
+			float dist = glm::length(to_player3);
+			if (dist <= 0.0001f || dist > enemy_view_distance) continue;
+
+			glm::vec3 dir = to_player3 / dist;
+			float cos_half_fov = std::cos(glm::radians(enemy_fov_deg * 0.5f));
+			float cos_theta    = glm::dot(glm::normalize(c_forward), dir);
+
+			bool in_fov = (cos_theta > cos_half_fov) && (glm::dot(c_forward, to_player3) > 0.0f);
+
+			// LOS hook (currently always unblocked):
+			auto occluded_civ_to_player = [&]() -> bool {
+				// TODO: real ray/occlusion test if you want
+				return false;
+			};
+			bool blocked = occluded_civ_to_player();
+
+			if (in_fov && !blocked) {
+				being_watched = true;
+				watching_civilian = &civ;     // remember this civilian
+				civ.watching_player = true;   // put them in watch mode (no movement)
+				break; // any one civilian is enough
+			}
+		}
+	}
+	//2025/11/22 update
+	// --- Latch logic (sticky "seeing" state with grace timeout) ---
+	//2025/11/22 update
+	if (being_watched) {
+		watched_accum += elapsed;
+		if (watched_accum >= watch_to_gameover) {
+			trigger_game_over();
+		}
+	} else {
+		// no one is watching this frame → reset the timer
+		watched_accum = 0.0f;
+	}
+	//2025/11/22 update
+
+	// update civilians
+	for (auto &civilian : civilians) {
+		civilian_update(civilian, elapsed);
+	}
+	resolve_collisions(civilians);
+	civilian_avoid_obstacles(civilians, {{player, 0.7f}, {enemy, 0.7f}});
+
+	//2025/11/22 update
+	// --- Make the watching civilian rotate to face the player ---
+	if (player) {
+		for (auto &civ : civilians) {
+			if (!civ.transform) continue;
+			if (!civ.watching_player) continue;
+
+			// planar direction from civilian to player
+			glm::vec3 to_player3 = player->position - civ.transform->position;
+			to_player3.z = 0.0f; // ignore height
+
+			glm::vec2 dir(to_player3.x, to_player3.y);
+			float len = glm::length(dir);
+			if (len < 1e-4f) continue;
+
+			dir /= len;
+			// +Y is forward, so angle is atan2(x, y)
+			float angle = std::atan2(dir.x, dir.y);
+
+			glm::quat target_rot =
+				glm::angleAxis(angle, glm::vec3(0.0f, 0.0f, 1.0f)) *
+				civ.base_rotation;
+
+			// smooth turn toward player
+			civ.transform->rotation = glm::slerp(
+				civ.transform->rotation,
+				target_rot,
+				1.0f - std::exp(-0.5f * elapsed)
+			);
+		}
+	}
+	//2025/11/22 update//
+	// --- Audio listener follow player ---
+	{
+		glm::mat4x3 frame = player->make_parent_from_local();
+		glm::vec3 frame_right = frame[0];
+		glm::vec3 frame_at = frame[3];
+		Sound::listener.set_position_right(frame_at, frame_right, 1.0f / 60.0f);
+	}
+
+	// --- reset one-frame key counts ---
+	left.downs = right.downs = up.downs = down.downs = 0;
+}
+
+
+void PlayMode::draw(glm::uvec2 const &drawable_size) {
+
+	//11/23 Update
+	// --- GAME OVER SCREEN: clear everything and only draw text ---
+	if (game_over) {
+		// draw straight to default framebuffer
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, drawable_size.x, drawable_size.y);
+
+		// clear color + depth so nothing from the scene remains
+		glDisable(GL_DEPTH_TEST);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // black background
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f,        0.0f, 0.0f,
+			0.0f,         1.0f,        0.0f, 0.0f,
+			0.0f,         0.0f,        1.0f, 0.0f,
+			0.0f,         0.0f,        0.0f, 1.0f
+		));
+
+		constexpr float H = 0.18f; // text size
+
+		// Red main title
+		glm::u8vec4 red = glm::u8vec4(0xff, 0x00, 0x00, 0xff);
+		lines.draw_text("Zoo has been locked",
+			glm::vec3(-0.7f, 0.1f, 0.0f),  // a bit above center
+			glm::vec3(H, 0.0f, 0.0f),
+			glm::vec3(0.0f, H, 0.0f),
+			red
+		);
+
+		// White instruction below
+		glm::u8vec4 white = glm::u8vec4(0xff, 0xff, 0xff, 0xff);
+		constexpr float H2 = 0.10f; // slightly smaller text
+		lines.draw_text("Press R to restart",
+			glm::vec3(-0.35f, -0.15f, 0.0f),  // below the first line
+			glm::vec3(H2, 0.0f, 0.0f),
+			glm::vec3(0.0f, H2, 0.0f),
+			white
+		);
+
+		glEnable(GL_DEPTH_TEST);
+		return; // IMPORTANT: skip all normal drawing
+	}
+	//11/23 Update
+	//update camera aspect ratio for drawable:
+	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
+	glm::mat4 world_to_clip = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	glm::vec3 eye = camera->transform->make_world_from_local()[3];
+
+	// setup matrices for particles
+	glUseProgram(particle_program->program);
+	glUniformMatrix4fv(particle_program->CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(camera->make_projection() * glm::mat4(camera->transform->make_local_from_world())));
+	glUniform1fv(particle_program->ASPECT, 1, (GLfloat *)&camera->aspect);
+	glUniform1i(particle_program->LIGHT_TYPE_int, 1);
+	glUniform3fv(particle_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
+	glUniform3fv(particle_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));	
+	glUseProgram(0);
+
+	// //set up light type and position for lit_color_texture_program:
+	// // TODO: consider using the Light(s) in the scene to do this
+	// glUseProgram(lit_color_texture_program->program);
+	// glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
+	// glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
+	// glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
+	// glUseProgram(0);
+
+	//--- draw geometry to framebuffer ---
+	fb.resize(drawable_size);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fb.objects_fb); // bind the objects (G-buffer) framebuffer as render target
+
+	GLfloat zeros[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // helper clear color (all channels = 0)
+	glClearBufferfv(GL_COLOR, 0, zeros); // clear color attachment 0 (position texture) to zeros
+	glClearBufferfv(GL_COLOR, 1, zeros); // clear color attachment 1 (normal + roughness) to zeros
+	glClearBufferfv(GL_COLOR, 2, zeros); // clear color attachment 2 (albedo) to zeros
+	glClear(GL_DEPTH_BUFFER_BIT); // clear the shared depth buffer
+
+	glDisable(GL_BLEND); // disable blending for the geometry pass
+	glEnable(GL_DEPTH_TEST); // enable depth testing so only nearest fragments write
+	glDepthFunc(GL_LEQUAL); // depth test: pass if incoming depth <= stored depth
+
+	//draw objects to geometry framebuffers:
+	scene.draw(world_to_clip); // render scene into G-buffers using world->clip matrix
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind framebuffer (return to default framebuffer)
+
+	GL_ERRORS(); // check for GL errors (helper macro)
+
+	//--- draw lights, reading geometry from framebuffer ---
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fb.lights_fb); // bind lights framebuffer (output accumulation texture)
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set clear color for lights pass (transparent black)
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear both color and depth on lights framebuffer
+	glDisable(GL_DEPTH_TEST); // disable standard depth testing for light accumulation
+	glDepthFunc(GL_GREATER); // use reversed-depth test: pass if fragment depth > stored depth (used with front-face culling)
+
+	glCullFace(GL_FRONT); // cull front faces so we render back faces of light volumes
+	glEnable(GL_CULL_FACE); // enable face culling
+
+	glEnable(GL_BLEND); // enable blending to accumulate light contributions
+	glBlendEquation(GL_FUNC_ADD); // blending operation: add src and dst
+	glBlendFunc(GL_ONE, GL_ONE); // additive blending: src*1 + dst*1
+	glDepthMask(GL_FALSE); // disable depth writes while accumulating lighting (keep depth buffer from changing)
+
+	//draw geometry for each light:
+	auto &prog = basic_material_deferred_light_program; // reference to the deferred-light shader wrapper
+	glUseProgram(prog->program); // bind the deferred-light shader program
+
+	glBindVertexArray(light_for_basic_material_deferred_light); // bind VAO containing the light-volume geometry
+
+	glActiveTexture(GL_TEXTURE0); // select texture unit 0
+	glBindTexture(GL_TEXTURE_2D, fb.position_tex); // bind world-space position G-buffer to unit 0
+	glActiveTexture(GL_TEXTURE1); // select texture unit 1
+	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex); // bind normal+roughness G-buffer to unit 1
+	glActiveTexture(GL_TEXTURE2); // select texture unit 2
+	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex); // bind albedo (color) G-buffer to unit 2
+
+	for (auto const &light : scene.lights) { // iterate over all lights in the scene
+		glm::mat4 light_to_world = light.transform->make_world_from_local(); // compute light's model-to-world transform
+
+		Mesh const *mesh = nullptr; // pointer to chosen light-volume mesh for this light
+
+		glUniform3fv(prog->EYE_vec3, 1, glm::value_ptr(eye)); // upload camera/eye position (in light-space)
+		glUniform3fv(prog->LIGHT_LOCATION_vec3, 1, glm::value_ptr(glm::vec3(light_to_world[3]))); // upload light position
+		glUniform3fv(prog->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(-light_to_world[2]))); // upload light direction (negated forward)
+		glUniform3fv(prog->LIGHT_ENERGY_vec3, 1, glm::value_ptr(light.energy)); // upload light energy/color
+		if (light.type == Scene::Light::Point) {
+			glUniform1i(prog->LIGHT_TYPE_int, 0); // tell shader this is a point light
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // cutoff not used for point here (set to 1)
+			mesh = &light_meshes->cube; // use cube mesh as bounding volume for point light
+			//when is energy / dis^2 < 1/256.0f?
+			float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // compute influence radius from energy
+			light_to_world = light_to_world * glm::mat4( // scale the light-volume by R
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		} else if (light.type == Scene::Light::Hemisphere) {
+			glUniform1i(prog->LIGHT_TYPE_int, 1); // hemisphere light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
+			mesh = &light_meshes->everything; // full-screen geometry
+			float R = 1.0f; // radius unused/1
+			light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		} else if (light.type == Scene::Light::Spot) {
+			glUniform1i(prog->LIGHT_TYPE_int, 2); // spot light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, std::cos(0.5f * light.spot_fov)); // upload spot cutoff cosine
+			mesh = &light_meshes->cone; // use cone mesh for spot volume
+			float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // estimate radius from energy
+			//HACK: hard-limit to 5 units:
+			R = 5.0f; // clamp radius to 5 to avoid huge cones
+			float C = std::tan(0.5f * light.spot_fov); // cone radius factor from FOV
+			light_to_world = light_to_world * glm::mat4( // scale cone by C*R (x/y) and R (z)
+				C*R, 0.0f, 0.0f, 0.0f,
+				0.0f, C*R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		} else if (light.type == Scene::Light::Directional) {
+			glUniform1i(prog->LIGHT_TYPE_int, 3); // directional light type
+			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
+			mesh = &light_meshes->everything; // full-screen geometry for directional
+			float R = 1.0f; // unused scale
+			light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
+				R, 0.0f, 0.0f, 0.0f,
+				0.0f, R, 0.0f, 0.0f,
+				0.0f, 0.0f, R, 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+		}
+		glUniformMatrix4fv(prog->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(world_to_clip * light_to_world)); // upload light-volume transform to clip space
+
+		if (mesh && mesh->count) { // if we have geometry, draw the light volume
+			glDrawArrays(mesh->type, mesh->start, mesh->count); // render light-volume; shader reads G-buffers to accumulate lighting
+		}
+	}
+
+	glActiveTexture(GL_TEXTURE2); // restore texture unit 2
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 2
+	glActiveTexture(GL_TEXTURE1); // restore texture unit 1
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 1
+	glActiveTexture(GL_TEXTURE0); // restore texture unit 0
+	glBindTexture(GL_TEXTURE_2D, 0); // unbind texture from unit 0
+
+	glBindVertexArray(0); // unbind VAO
+
+	glDepthMask(GL_TRUE); // re-enable depth writes
+
+	glDisable(GL_CULL_FACE); // disable face culling
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind any framebuffer (back to default)
+
+	GL_ERRORS(); // debug check for GL errors
+
+	//--- copy lights fb info to screen ---
+	
+	glClearColor(0.2f, 0.2f, 0.2f, 0.0f);  // Set background to dark gray
+	glClear(GL_COLOR_BUFFER_BIT);           // Clear the color buffer with the background color
+
+	GL_ERRORS();
+	glDisable(GL_BLEND);                    // Disable blending as we're doing a straight copy
+	glDisable(GL_DEPTH_TEST);               // Disable depth testing as we're drawing a full-screen quad
+	GL_ERRORS();
+
+	glBindVertexArray(empty_vao);           // Bind the empty VAO for full-screen quad rendering
+	glUseProgram(copy_to_screen_program->program);  // Use the program that copies textures to screen
+
+	glActiveTexture(GL_TEXTURE0);           // Activate the first texture unit
+	glBindTexture(GL_TEXTURE_2D, fb.output_tex);  // Show final lighting result
+
+	// if (show == ShowOutput) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.output_tex);  // Show final lighting result
+	// } else if (show == ShowPosition) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.position_tex);  // Show world-space positions
+	// } else if (show == ShowNormalRoughness) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex);  // Show normals and roughness
+	// } else if (show == ShowAlbedo) {
+	// 	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex);  // Show surface colors and textures
+	// }
+
+	GL_ERRORS();
+	glDrawArrays(GL_TRIANGLES, 0, 3);       // Draw full-screen triangle (efficient full-screen quad)
+	GL_ERRORS();
+
+	glActiveTexture(GL_TEXTURE0);           // Reset active texture unit
+	glBindTexture(GL_TEXTURE_2D, 0);        // Unbind texture
+
+	glBindVertexArray(0);                   // Unbind VAO
+	glUseProgram(0);                        // Unbind shader program
+
+	//--- stalking mechanics ---
+	if (focus_mode) {
+		glClearColor(1.0f, 1.0f, 1.0f, 1.0f); // stark white background for high contrast
+	} else if (execution_mode) {
+	glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // red background during execution mode
+	} else {
+		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+	}
+
+	// We already have the lit color on the default framebuffer.
+	// Now we only want depth, so disable color writes:
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
+	glDepthMask(GL_TRUE);
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
+	glClear(GL_DEPTH_BUFFER_BIT); // clears depth only (color is masked off)
+
+	// Draw the scene with your normal pipelines; this will fill depth,
+	// but leave the deferred-lit color untouched:
+	scene.draw(*camera);
+
+	// Re-enable color writes for later overlays:
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+	enemy_visible = false; // default
+
+	if (execution_target) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+		glm::vec3 c_world = execution_target->make_world_from_local()[3];
+		glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.0f);
+
+		if (clip.w > 0.0f) {
+			glm::vec3 ndc = glm::vec3(clip) / clip.w;
+
+			// check it's in screen range
+			if (ndc.x >= -1.0f && ndc.x <= 1.0f &&
+				ndc.y >= -1.0f && ndc.y <= 1.0f) {
+					enemy_visible = true;
+
+				// depth sampling logic stays the same, just using c_world / execution_target
+				// (copy your existing enemy-depth code and replace `enemy` with `execution_target`)
+				// ...
+				// enemy_visible = !(depth_sample + eps < enemy_depth);
+			}
+		}
+	}
+
+	// draw aim indicator / outline on target civilian in focus mode
+	if (focus_mode && execution_target && enemy_visible) {
+		glm::mat4 clip_from_world =
+			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+
+		glm::mat4x3 world_from_target = execution_target->make_world_from_local();
+		glm::vec3 c_world = world_from_target[3];           // translation column
+		glm::vec4 c_clip  = clip_from_world * glm::vec4(c_world, 1.0f);
+
+		if (c_clip.w > 0.0f) {
+<<<<<<< HEAD
+			glm::vec3 c_ndc = glm::vec3(c_clip) / c_clip.w;
+=======
+			// glm::vec3 c_ndc = glm::vec3(c_clip) / c_clip.w;
+>>>>>>> af26ea30e3c4596c75a6277439fbffaa732ec21d
+			// ... existing draw_lines / crosshair overlay code, just driven by c_ndc instead of enemy
+		}
+	}
+	if (focus_mode && enemy) {
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+
+		// bar geometry (screen space): centered, near bottom
+		const float bar_w = 1.6f;     // total width
+		const float bar_h = 0.08f;    // height
+		const float y     = -0.90f;   // vertical position
+		const float x0    = -0.5f * bar_w;
+		const float x1    =  0.5f * bar_w;
+		const float y0    = y;
+		const float y1    = y + bar_h;
+
+		// outline (light gray)
+		glm::u8vec4 outline(0xcc, 0xcc, 0xcc, 0xff);
+		lines.draw(glm::vec3(x0, y0, 0.0f), glm::vec3(x1, y0, 0.0f), outline);
+		lines.draw(glm::vec3(x1, y0, 0.0f), glm::vec3(x1, y1, 0.0f), outline);
+		lines.draw(glm::vec3(x1, y1, 0.0f), glm::vec3(x0, y1, 0.0f), outline);
+		lines.draw(glm::vec3(x0, y1, 0.0f), glm::vec3(x0, y0, 0.0f), outline);
+
+		// background (empty) – thin gray center line just for context (optional)
+		glm::u8vec4 back(0x55, 0x55, 0x55, 0xff);
+		lines.draw(glm::vec3(x0, (y0+y1)*0.5f, 0.0f), glm::vec3(x1, (y0+y1)*0.5f, 0.0f), back);
+
+		// FILLED BLACK RECTANGLE that grows with stalk_charge:
+		const float fill_x = x0 + (x1 - x0) * stalk_charge;
+		glm::u8vec4 black(0x00, 0x00, 0x00, 0xff);
+
+		// scan-fill using horizontal lines
+		const int stripes = 48; // more = more solid-looking fill
+		for (int i = 0; i < stripes; ++i) {
+			float t0 = float(i) / stripes;
+			float y_line = y0 + t0 * bar_h;
+			lines.draw(glm::vec3(x0,    y_line, 0.0f),
+					glm::vec3(fill_x, y_line, 0.0f),
+					black);
+		}
+
+		// label
+		const float H = 0.06f;
+		lines.draw_text("STALK",
+			glm::vec3(x0, y1 + 0.02f, 0.0f),
+			glm::vec3(H, 0.0f, 0.0f),
+			glm::vec3(0.0f, H, 0.0f),
+			outline
+		);
+
+		glEnable(GL_DEPTH_TEST);
+	}
+	if (being_watched) {
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+		// Centered-ish: start slightly left of (0,0)
+		constexpr float H = 0.14f; // text size
+		glm::u8vec4 warn = glm::u8vec4(0xff, 0x40, 0x40, 0xff);
+		lines.draw_text("You are being watched!",
+			glm::vec3(-0.55f, 0.02f, 0.0f),   // tweak to taste for centering
+			glm::vec3(H, 0.0f, 0.0f),         // x step
+			glm::vec3(0.0f, H, 0.0f),         // y step
+			warn
+		);
+		glEnable(GL_DEPTH_TEST);
+	}
+	//11/23 update Game over logic 
+	/*
+	if (game_over) {
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		));
+		constexpr float H = 0.18f; // slightly larger text
+		glm::u8vec4 color = glm::u8vec4(0xff, 0x00, 0x00, 0xff); // bright red
+		lines.draw_text("Zoo has been locked",
+			glm::vec3(-0.7f, 0.0f, 0.0f),  // centered-ish position
+			glm::vec3(H, 0.0f, 0.0f),
+			glm::vec3(0.0f, H, 0.0f),
+			color
+		);
+		glEnable(GL_DEPTH_TEST);
+	}
+	*/
+	{ //use DrawLines to overlay some text:
+		glDisable(GL_DEPTH_TEST);
+		float aspect = float(drawable_size.x) / float(drawable_size.y);
+		DrawLines lines(glm::mat4(
+			1.0f / aspect, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f));
+
+		constexpr float H = 0.05f;
+
+		if (game_success)
+		{
+			lines.draw_text("You escaped the zoo... You are free!",
+							glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+			float ofs = 2.0f / drawable_size.y;
+			lines.draw_text("You escaped the zoo... You are free!",
+							glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		}
+		else
+		{
+			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
+							glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+			float ofs = 2.0f / drawable_size.y;
+			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
+							glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		}
+	}
+	/*
+	if (deer_ui_tex && deer_ui_size.x && deer_ui_size.y) {
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		float wpx = deer_ui_target_width_px;
+		float hpx = wpx * float(deer_ui_size.y) / float(deer_ui_size.x);
+		const float pad = 8.0f;
+
+		auto px2ndc = [&](float x_px, float y_px)->glm::vec2 {
+			return {
+				(x_px / float(drawable_size.x)) * 2.0f - 1.0f,
+				(y_px / float(drawable_size.y)) * 2.0f - 1.0f
+			};
+		};
+		glm::vec2 p00 = px2ndc(pad,        pad       );
+		glm::vec2 p10 = px2ndc(pad + wpx,  pad       );
+		glm::vec2 p11 = px2ndc(pad + wpx,  pad + hpx );
+		glm::vec2 p01 = px2ndc(pad,        pad + hpx );
+
+		float vtx[6*4] = {
+			p00.x,p00.y, 0,0,  p10.x,p10.y, 1,0,  p11.x,p11.y, 1,1,
+			p00.x,p00.y, 0,0,  p11.x,p11.y, 1,1,  p01.x,p01.y, 0,1
+		};
+
+		glBindBuffer(GL_ARRAY_BUFFER, deer_ui_vbo);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vtx), vtx);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glUseProgram(lit_color_texture_program->program);
+
+		GLint u_obj = glGetUniformLocation(lit_color_texture_program->program, "OBJECT_TO_CLIP");
+		if (u_obj < 0) u_obj = glGetUniformLocation(lit_color_texture_program->program, "OBJECT_TO_CLIP_mat4");
+		if (u_obj >= 0) {
+			glm::mat4 I(1.0f);
+			glUniformMatrix4fv(u_obj, 1, GL_FALSE, glm::value_ptr(I));
+		}
+
+		GLint u_samp = glGetUniformLocation(lit_color_texture_program->program, "COLOR_TEXTURE");
+		if (u_samp >= 0) glUniform1i(u_samp, 0);
+		GLint u_use = glGetUniformLocation(lit_color_texture_program->program, "UseTexture");
+		if (u_use >= 0) glUniform1i(u_use, 1);
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, deer_ui_tex);
+
+		glBindVertexArray(deer_ui_vao);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glBindVertexArray(0);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glUseProgram(0);
+
+		glDisable(GL_BLEND);
+		glEnable(GL_CULL_FACE);
+		glEnable(GL_DEPTH_TEST);
+	}*/
+	GL_ERRORS();
+}
