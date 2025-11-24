@@ -1162,32 +1162,10 @@ void PlayMode::update(float elapsed) {
 		watched_accum += elapsed;
 		if (watched_accum >= watch_to_gameover) {
 			trigger_game_over();
-		} else {
+		}
+	} else {
 			// continuous requirement: reset if not watched this frame
 			watched_accum = 0.0f;
-		}
-	} else if (watched_latched) {
-		bool out_of_range = true;
-		bool blocked_now = false;
-
-		if (enemy && player) {
-			glm::mat4x3 e_world = enemy->make_world_from_local();
-			glm::vec3 e_pos = e_world[3];
-			float dist = glm::length(player->position - e_pos);
-			out_of_range = !(dist <= enemy_view_distance);
-
-			auto occluded_enemy_to_player = [&]() -> bool { return false; };
-			blocked_now = occluded_enemy_to_player();
-		}
-
-		if (out_of_range || blocked_now) {
-			watched_grace_timer -= elapsed;
-			if (watched_grace_timer <= 0.0f)
-				watched_latched = false;
-		} else {
-			// still good; refresh
-			watched_grace_timer = watched_grace;
-		}
 	}
 
 	// --- Enemy behavior: Stand-and-watch vs Patrol ---
