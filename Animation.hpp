@@ -51,7 +51,7 @@ struct Animation {
 
 template<typename T>
 struct AnimationBuffer {
-    AnimationBuffer(std::string const &filename);
+    AnimationBuffer(std::string const &filename, bool loop = true);
     const Animation< T > &lookup(std::string const &name) const;
 
     std::map< std::string, Animation< T > > animations;
@@ -165,7 +165,7 @@ bool Animation< T >::add_keyframes(const std::vector< T > &buffer, const std::ve
 } 
 
 template <typename T>
-AnimationBuffer< T >::AnimationBuffer(std::string const &filename) {
+AnimationBuffer< T >::AnimationBuffer(std::string const &filename, bool loop) {
     std::ifstream file(filename, std::ios::binary);
 
     std::vector< T > data;
@@ -220,7 +220,7 @@ AnimationBuffer< T >::AnimationBuffer(std::string const &filename) {
             } 
 
             std::string name(&strings[0] + anim_entry.name_begin, &strings[0] + anim_entry.name_end);
-            Animation< T > anim(name, fps, true);
+            Animation< T > anim(name, fps, loop);
             anim.data.assign(
                 data.begin() + anim_entry.keyframe_begin,
                 data.begin() + anim_entry.keyframe_end

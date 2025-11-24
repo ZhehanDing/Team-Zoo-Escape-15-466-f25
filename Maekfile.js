@@ -154,6 +154,7 @@ const game_names = [
 	maek.CPP('Skeleton.cpp'),
 	maek.CPP('Particles.cpp'),
 	maek.CPP('Textures.cpp'),
+	maek.CPP('Collision.cpp'),
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('main.cpp'),
 	maek.CPP('SkinningProgram.cpp'),

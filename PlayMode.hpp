@@ -48,7 +48,14 @@ struct PlayMode : Mode {
 	Scene::Transform *final_deer_leg = nullptr;
 	Scene::Transform *sky = nullptr;
 	Scene::Transform *gate = nullptr;
-	std::vector<Scene::Transform *> fences;
+	Scene::Transform *gate_L = nullptr;
+	Scene::Transform *gate_R = nullptr;
+	Scene::Transform *gate_collider = nullptr;
+	Scene::Transform *deer_fence_collider = nullptr;
+	Scene::Transform *zoo_fence_near_collider = nullptr;
+	Scene::Transform *zoo_fence_far_collider = nullptr;
+	std::vector<Scene::Transform *> trees;
+	// std::vector<Scene::Transform *> cylinders;
 	int deer_stage = 0; // 0 = original deer, 1 = deer + leg, 2 = ... etc.
 	glm::quat player_base_rotation;
 
@@ -62,6 +69,17 @@ struct PlayMode : Mode {
 
 	float enemy_mesh_scale = 1.0f;
 	glm::vec3 enemy_mesh_offset = glm::vec3(0.0f);
+
+	// Gate
+	bool gate_can_open = false;
+	bool gate_anim_playing = false;
+	float gate_rot_t = 0.0f;
+	float gate_rot_duration_1 = 6.0f;
+	float gate_rot_duration_2 = 10.0f;
+
+	glm::quat gate_L_start, gate_L_end;
+	glm::quat gate_R_start, gate_R_end;
+	glm::quat gate_L_final, gate_R_final;
 
 	//camera:
 	Camera *cam;
@@ -103,8 +121,10 @@ struct PlayMode : Mode {
 	float watched_accum = 0.0f;          // continuous time (seconds) currently being watched
 	float watch_to_gameover = 3.0f;      // threshold (seconds)
 	bool  game_over = false;             // simple game-over latch
-
 	void trigger_game_over();            // declare handler
+
+	bool game_success = false;
+	void trigger_game_success();
 
 	// Enemy collapse animation (after execution)
 	bool enemy_collapsing = false;
@@ -135,11 +155,5 @@ struct PlayMode : Mode {
 	std::vector<Sound::Sample const *> attraction_sounds; // <-- use raw pointers
 	std::mt19937 rng{123456u};       // simple RNG; you can seed with time if you want
 	float attraction_cooldown_timer = 0.0f;
-	float attraction_cooldown = 2.0f; // avoid accidental audio spam
-	std::vector<int> attraction_ids = {1, 2, 3, 4};
-	glm::vec3 pull_target = glm::vec3(0.0f);
-	bool being_pulled = false;
-	// NEW: Set civilian is currently watching the player
-	//2025/11/22 update
-	Civilian *watching_civilian = nullptr;
+	float attraction_cooldown = 0.6f; // avoid accidental audio spam
 };

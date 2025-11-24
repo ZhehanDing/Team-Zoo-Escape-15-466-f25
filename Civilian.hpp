@@ -29,13 +29,6 @@ struct Civilian {
 	float radius = 0.6f;
 
 	std::mt19937 rng{std::random_device{}()};
-	// --- NEW: attraction / pull-to-player state ---
-	glm::vec3 pull_target{0.0f, 0.0f, 0.0f};
-	bool being_pulled = false;
-	float pull_speed = 3.0f; // faster than normal wandering
-	// NEW: this civilian is currently watching the player (stand + rotate)
-	//2025/11/22 update
-	bool watching_player = false;
 };
 
 inline float rand(std::mt19937 &rng, float min, float max) {
@@ -44,55 +37,6 @@ inline float rand(std::mt19937 &rng, float min, float max) {
 
 
 inline void civilian_update(Civilian &c, float elapsed) {
-	// NEW: if this civilian is in watch mode, don't move them here
-	//2025/11/22 update
-	if (c.watching_player) {
-		c.velocity = glm::vec2(0.0f);
-		c.move_timer = 0.0f;
-		c.pause_timer = 0.0f;
-		return; // PlayMode will handle rotation toward player
-	}
-
-	if (c.being_pulled) {
-		glm::vec3 pos3 = c.transform->position;
-		glm::vec2 pos(pos3.x, pos3.y);
-
-		glm::vec2 target_xy(c.pull_target.x, c.pull_target.y);
-		glm::vec2 to_target = target_xy - pos;
-		float dist = glm::length(to_target);
-
-		// stop when close enough to player
-		if (dist > 0.6f) {
-			glm::vec2 dir = to_target / dist;
-			glm::vec2 step = dir * c.pull_speed * elapsed;
-
-			// move civilian on x,y plane
-			c.transform->position.x += step.x;
-			c.transform->position.y += step.y;
-
-			// update velocity for rotation
-			c.velocity = step / std::max(elapsed, 1e-4f);
-
-			// rotate to face movement direction
-			if (glm::length(c.velocity) > 1e-3f) {
-				float angle = std::atan2(c.velocity.x, c.velocity.y);
-				glm::quat target_rot = glm::angleAxis(angle, glm::vec3(0, 0, 1)) * c.base_rotation;
-				c.transform->rotation = glm::slerp(
-					c.transform->rotation,
-					target_rot,
-					1.0f - std::exp(-6.0f * elapsed)
-				);
-			}
-		} else {
-			// reached player: stop pulling, resume normal AI with a short pause
-			c.being_pulled = false;
-			c.velocity = glm::vec2(0.0f);
-			c.pause_timer = rand(c.rng, 1.0f, 3.0f);
-		}
-
-		return; // skip normal wandering logic while being pulled
-	}
-
 	if (c.pause_timer > 0.0f) {
         // decrease resting time
 		c.pause_timer -= elapsed;

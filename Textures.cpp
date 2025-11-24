@@ -39,22 +39,27 @@ const std::vector<NamedTexture> named_textures = {
     // General
     {"Steel", "textures/steel.png"},
     {"Brown Metal", "textures/brown_metal.png"},
+    {"light Metal", "textures/light_metal.png"},
     {"Rubber", "textures/rubber.png"},
     // Objects
     {"Fence Brick", "textures/BrickWall001a_Color.png"},
     {"Street lamp", "textures/old lamp post_BaseColor.png"},
+    {"Окружность", "textures/steel.png"},
+    {"Цилиндр", "textures/steel.png"},
     {"Cobblestone road", "textures/road_C_fix.png"},
     {"Park Bench", "textures/Park Bench_BaseColor.1001.png"},
     {"Fence_array", "textures/steel.png"},
     {"preset_0", "textures/modular_electricity_poles_diff_8k.png"},
-    {"Ground", "textures/compitition1_Branch_BaseColor.png"},
+    // {"Ground", "textures/compitition1_Branch_BaseColor.png"},
     // Animals
-    {"Tyriese_Miller_C_Deer_Idle:body", "textures/deer_skin_plain.png"},
+    {"Tyriese_Miller_C_Deer_Idle:body", "textures/deer_skin_light.png"},
     {"Tyriese_Miller_C_Deer_Idle:antler", "textures/bone.png"},
+    {"HG_Baggy_Jeans", "textures/Dwain.001_HG_Baggy_Jeans.002_base color.png"},
+    {"HG_Suede_Sneakers_Male", "textures/Dwain.001_HG_Suede_Sneakers_Male.002_base color.png"},
     {"Deer Behind Fence", "textures/deer_skin_plain.png"},
     {"Dead Deer", "textures/deer_skin_spotted.png"},
     {"Rat", "textures/rat.png"},
-    // {"Ground", "textures/grass.png"},
+    {"Ground", "textures/grass_blue.png"},
     {"177d920ddde57c74f8e1ef18863ab511", "textures/sign.png"},
     {"Zoo Sign.001", "textures/zoo_sign_1.png"},
     {"Zoo Sign.002", "textures/zoo_sign_2.png"},
@@ -78,15 +83,21 @@ const std::vector<NamedTexture> named_textures = {
     {"Mossy Rock 2", "textures/rock_2.png"},
     {"Wild Grass", "textures/Grass_basecolor.png"},
     // Cars
-    {"licensePlate", "textures/license plate.png"},
+    {"lincensePlate", "textures/license plate.png"},
     {"Volvo body 1", "textures/blue_metal.png"},
     {"Volvo body 2", "textures/red_metal.png"},
     {"rim", "textures/rubber.png"},
     {"tire", "textures/rubber.png"},
+    {"wind", "textures/window.png"},
     // Small house
     {"Small House Terra", "textures/small_house_terra.png"},
     {"Small House Main", "textures/small_house_main.png"},
     {"Small House Tower", "textures/small_house_tower_2.png"},
+    // Statues
+    {"Angry Bear", "textures/angry-bear.png"},
+    {"Bear Sculpture", "textures/BearStatue.png"},
+    {"Fish Statue", "textures/rock_1.png"},
+    {"Terracotta owl", "textures/Owl_Color.png"},
 };
 
 Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> const *
