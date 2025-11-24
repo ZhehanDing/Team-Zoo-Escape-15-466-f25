@@ -63,6 +63,11 @@ struct PlayMode : Mode {
 	std::unique_ptr< Skeleton > enemy_skeleton;
 	std::vector< std::unique_ptr< RiggedMesh > > enemy_rigs;
 	std::vector< Scene::Drawable * > enemy_drawables;
+	Scene::Drawable *enemy_hat_drawable = nullptr;
+	Scene::Drawable *enemy_base_drawable = nullptr;
+	std::vector< std::pair< Scene::Drawable *, uint32_t > > enemy_fade_drawables;
+	float enemy_fade_duration = 1.0f; // Fade out duration
+	float enemy_fade_timer = 0.0f;
 	AnimationGraph< Skeleton::BoneTransform > enemy_graph =
 		AnimationGraph< Skeleton::BoneTransform >(
 			[](Skeleton::BoneTransform const &a,
@@ -115,6 +120,7 @@ struct PlayMode : Mode {
 	float enemy_wait_at_point = 0.4f;  // pause duration
 	float enemy_reach_epsilon = 0.15f; // how close counts as "arrived"
 	glm::quat enemy_base_rotation;	   // remember original facing
+	bool enemy_transitioning_to_dead = false;
 	// Enemy vision
 	bool being_watched = false; // updated in update(), read in draw()
 	Civilian *watching_civilian = nullptr;
@@ -133,6 +139,8 @@ struct PlayMode : Mode {
 
 	bool game_success = false;
 	void trigger_game_success();
+
+	void enemy_to_dead();
 
 	// Enemy collapse animation (after execution)
 	bool enemy_collapsing = false;

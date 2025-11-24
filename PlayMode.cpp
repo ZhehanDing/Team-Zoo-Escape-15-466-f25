@@ -401,6 +401,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	enemy_graph.add_state(human_animations->lookup("Walk"));
 	enemy_graph.add_state(human_animations->lookup("StandToWalk"));
 	enemy_graph.add_state(human_animations->lookup("WalkToStand"));
+	enemy_graph.add_state(human_animations->lookup("WalkToDead"));
 	
 	// Start with Stand animation
 	auto stand_it = enemy_graph.states.find("Stand");
@@ -436,6 +437,30 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
+		
+		if (mesh_name == "fedora_cocked") {
+			enemy_hat_drawable = &drawable;
+		}
+		if (mesh_name == "base") {
+			enemy_base_drawable = &drawable;
+		}
+		
+		std::vector<std::string> keep_visible = {
+			"fedora_cocked",
+			"male_elegantsuit01",
+			"punkduck_tennis_shoes",
+			"toigo_ankle_boots_male"
+		};
+		bool keep_visible_mesh = false;
+		for (const std::string& keep_name : keep_visible) {
+			if (mesh_name == keep_name) {
+				keep_visible_mesh = true;
+				break;
+			}
+		}
+		if (!keep_visible_mesh) {
+			enemy_fade_drawables.push_back({&drawable, mesh.count});
+		}
 		
 		bool found_texture = false;
 		for (size_t i = 0; i < named_textures.size(); ++i) {
@@ -653,6 +678,28 @@ void PlayMode::trigger_game_success() {
 	game_success = true;
 }
 
+void PlayMode::enemy_to_dead() {
+	if (!enemy || !enemy_alive || enemy_collapsing) return;
+	enemy_transitioning_to_dead = true;
+	
+	auto set_state = [&](const std::string &name) {
+		auto it = enemy_graph.states.find(name);
+		if (it != enemy_graph.states.end()) {
+			enemy_graph.current_state = &it->second;
+			enemy_graph.playback = 0.0f;
+			enemy_graph.keyframe_index = 0;
+		}
+	};
+	
+	if (enemy_state == ENEMY_STAND) {
+		set_state("StandToWalk");
+		enemy_state = ENEMY_BETWEEN;
+	} else if (enemy_state == ENEMY_WALK) {
+		set_state("WalkToDead");
+		enemy_state = ENEMY_BETWEEN;
+	}
+}
+
 PlayMode::~PlayMode() {
 	/*	// NEW: 释放 deer UI 资源
 	if (deer_ui_tex) glDeleteTextures(1, &deer_ui_tex);
@@ -787,6 +834,12 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			
 			return true;
 		}
+		// TODO: Delete later! For testing purposes
+		else if (evt.key.key == SDLK_X)
+		{
+			enemy_to_dead();
+			return true;
+		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
 		if (evt.key.key == SDLK_A) {
 			left.pressed = false;
@@ -903,6 +956,17 @@ void PlayMode::update(float elapsed) {
     attraction_cooldown_timer = std::max(0.0f, attraction_cooldown_timer - elapsed);
 	}
 
+	if (enemy_fade_timer > 0.0f) {
+		enemy_fade_timer = std::max(0.0f, enemy_fade_timer - elapsed);
+		float fade_progress = 1.0f - (enemy_fade_timer / enemy_fade_duration);
+		for (auto &[drawable, original_count] : enemy_fade_drawables) {
+			if (drawable) {
+				float remaining = 1.0f - fade_progress;
+				drawable->pipeline.count = (uint32_t)(original_count * remaining);
+			}
+		}
+	}
+
 	// --- Enemy collapse animation (after execution) ---
 	if (enemy && enemy_collapsing) {
 		enemy_collapse_t += elapsed;
@@ -916,7 +980,7 @@ void PlayMode::update(float elapsed) {
 			enemy_collapsing = false; // finished collapsing
 		}
 	}
-	enemy->scale = glm::vec3(1.3f);
+	enemy->scale = glm::vec3(1.5f);
 	enemy_graph.update(elapsed);
 
 	for (auto& rig : enemy_rigs) {
@@ -1137,16 +1201,49 @@ void PlayMode::update(float elapsed) {
 			const auto &anim = enemy_graph.current_state->animation;
 			if (!anim.loop && enemy_graph.playback >= anim.get_anim_length()) {
 				if (anim.name == "StandToWalk") {
-					set_state("Walk");
-					enemy_state = ENEMY_WALK;
+					if (enemy_transitioning_to_dead) {
+						set_state("WalkToDead");
+						enemy_state = ENEMY_BETWEEN;
+						auto walk_to_dead_it = enemy_graph.states.find("WalkToDead");
+						if (walk_to_dead_it != enemy_graph.states.end()) {
+							float anim_duration = walk_to_dead_it->second.animation.get_anim_length();
+							// Fade halfway through animation
+							enemy_fade_duration = anim_duration * 0.5f;
+							enemy_fade_timer = anim_duration * 0.5f;
+						}
+					} else {
+						set_state("Walk");
+						enemy_state = ENEMY_WALK;
+					}
 				} else if (anim.name == "WalkToStand") {
-					set_state("Stand");
-					enemy_state = ENEMY_STAND;
+					if (enemy_transitioning_to_dead) {
+						set_state("StandToWalk");
+						enemy_state = ENEMY_BETWEEN;
+					} else {
+						set_state("Stand");
+						enemy_state = ENEMY_STAND;
+					}
+				} else if (anim.name == "WalkToDead") {
+					enemy_transitioning_to_dead = false;
+					enemy_alive = false;
+					enemy_graph.playback = anim.get_anim_length();
 				}
 			}
 		}
 		
-		if (enemy_state != ENEMY_BETWEEN) {
+		if (enemy_transitioning_to_dead && enemy_state == ENEMY_WALK) {
+			set_state("WalkToDead");
+			enemy_state = ENEMY_BETWEEN;
+			auto walk_to_dead_it = enemy_graph.states.find("WalkToDead");
+			if (walk_to_dead_it != enemy_graph.states.end()) {
+				float anim_duration = walk_to_dead_it->second.animation.get_anim_length();
+				// Fade completes at halfway through animation
+				enemy_fade_duration = anim_duration * 0.5f;
+				enemy_fade_timer = anim_duration * 0.5f;
+			}
+		}
+		
+		if (enemy_state != ENEMY_BETWEEN && !enemy_transitioning_to_dead) {
 			auto change_state = [&](EnemyState next) {
 				if (next == enemy_state) return;
 				if (enemy_state == ENEMY_STAND && next == ENEMY_WALK) {
