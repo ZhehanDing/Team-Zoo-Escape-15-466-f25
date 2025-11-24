@@ -490,57 +490,60 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 
 	// populate civilians
 	std::mt19937 civilians_rng{std::random_device{}()};
-	glm::vec3 center = glm::vec3(-40.0f, -30.0f, 0.0f);
-	center = glm::vec3(0.0f, 40.0f, 0.0f);
-	
+	glm::vec3 center = glm::vec3(0.0f, 0.0f, 0.0f);
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_00", center + glm::vec3(x, y, 0.3f));
 	}
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_01", center + glm::vec3(x, y, 0.3f));
 	}
+	center = glm::vec3(0.0f, 20.0f, 0.0f);
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_02", center + glm::vec3(x, y, 0.3f));
 	}
+	center = glm::vec3(0.0f, 40.0f, 0.0f);
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_03", center + glm::vec3(x, y, 0.3f));
 	}
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_04", center + glm::vec3(x, y, 0.3f));
 	}
+	center = glm::vec3(0.0f, 60.0f, 0.0f);
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_05", center + glm::vec3(x, y, 0.3f));
 	}
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_06", center + glm::vec3(x, y, 0.3f));
 	}
+	center = glm::vec3(0.0f, 50.0f, 0.0f);
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_07", center + glm::vec3(x, y, 0.3f));
 	}
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_08", center + glm::vec3(x, y, 0.3f));
 	}
+	center = glm::vec3(10.0f, 50.0f, 0.0f);
 	{
-		float x = rand(civilians_rng, -10.0f, 10.0f);
-		float y = rand(civilians_rng, -10.0f, 10.0f);
+		float x = rand(civilians_rng, -5.0f, 5.0f);
+		float y = rand(civilians_rng, -5.0f, 5.0f);
 		make_civilian(this, "civilian_09", center + glm::vec3(x, y, 0.3f));
 	}
 
