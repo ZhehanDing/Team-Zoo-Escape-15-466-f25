@@ -1468,7 +1468,29 @@ void PlayMode::update(float elapsed) {
 
 			// LOS hook (currently always unblocked):
 			auto occluded_civ_to_player = [&]() -> bool {
-				// TODO: real ray/occlusion test if you want
+				glm::vec3 from = c_pos;
+				glm::vec3 to   = player->position;
+
+				glm::vec2 a(from.x, from.y);
+				glm::vec2 b(to.x,   to.y);
+
+				constexpr int STEPS = 10;
+				for (int i = 1; i <= STEPS; ++i) {
+					float t = float(i) / float(STEPS);
+					glm::vec2 p = glm::mix(a, b, t);
+					glm::vec3 pos(p.x, p.y, from.z);
+
+					CollisionHits hits = query_world_collisions(
+						pos,
+						gate_can_open ? nullptr : gate_collider,
+						deer_fence_collider,
+						zoo_fence_near_collider,
+						zoo_fence_far_collider
+					);
+					if (hits.any()) {
+						return true; // 中间被 gate 或 fence 挡住了
+					}
+				}
 				return false;
 			};
 			bool blocked = occluded_civ_to_player();

@@ -94,6 +94,30 @@ inline void civilian_set_state(Civilian &c, Civilian::State next) {
 		c.state = Civilian::RUN;
 	}
 }
+//11/24 Alex Ding Update
+inline bool civilian_can_see_player(const Civilian &c, Scene::Transform *player,
+                                    float max_dist, float fov_cos_threshold) {
+    if (!player) return false;
+
+    glm::vec3 civ_pos3 = c.transform->position;
+    glm::vec3 player_pos3 = player->position;
+
+    glm::vec2 civ_pos(civ_pos3.x, civ_pos3.y);
+    glm::vec2 player_pos(player_pos3.x, player_pos3.y);
+
+    glm::vec2 to_player = player_pos - civ_pos;
+    float dist = glm::length(to_player);
+    if (dist > max_dist) return false;
+    if (dist < 1e-3f) return true;
+
+    // 用世界空间的 forward
+    glm::mat4x3 frame = c.transform->make_world_from_local();
+    glm::vec3 fwd3 = -glm::vec3(frame[1]);   // 和你跑开逻辑保持一致
+    glm::vec2 fwd(fwd3.x, fwd3.y);
+
+    float facing_dot = glm::dot(glm::normalize(fwd), glm::normalize(to_player));
+    return facing_dot > fov_cos_threshold;
+}
 
 inline void civilian_update(Civilian &c, float elapsed, Scene::Transform *player){
 	if (c.being_pulled) {
@@ -163,7 +187,109 @@ inline void civilian_update(Civilian &c, float elapsed, Scene::Transform *player
 
 		return; // skip normal wandering logic while being pulled
 	}
+	//11/24 Alex Ding update
+	if (c.watching_player && player) {
+        // 保证是站立状态
+        if (c.state != Civilian::STAND && c.state != Civilian::BETWEEN) {
+            civilian_set_state(c, Civilian::STAND);
+        }
 
+        // 更新动画（站立呼吸什么的）
+        c.graph.update(elapsed * c.playback_speed);
+        for (auto &rig : c.rigs) {
+            rig->update(elapsed);
+        }
+
+        // 转头朝向玩家
+        glm::vec3 civ_pos3 = c.transform->position;
+        glm::vec3 player_pos3 = player->position;
+        glm::vec2 to_player(player_pos3.x - civ_pos3.x,
+                            player_pos3.y - civ_pos3.y);
+        float dist = glm::length(to_player);
+
+        if (dist > 1e-3f) {
+            glm::vec2 dir = to_player / dist;
+            float yaw = std::atan2(dir.x, dir.y);
+            glm::quat target_rot =
+                glm::angleAxis(yaw, glm::vec3(0, 0, 1)) * c.base_rotation;
+
+            c.transform->rotation = glm::slerp(
+                c.transform->rotation,
+                target_rot,
+                1.0f - std::exp(-6.0f * elapsed)
+            );
+        }
+
+        // 原地不动
+        c.velocity = glm::vec2(0.0f);
+
+        // 非常关键：直接 return，不再走后面的“跑开/闲逛”逻辑
+        return;
+    }
+	//Update
+	
+	if (player) {
+        glm::vec3 civ_pos3 = c.transform->position;
+        glm::vec3 player_pos3 = player->position;
+
+        glm::vec2 civ_pos(civ_pos3.x, civ_pos3.y);
+        glm::vec2 player_pos(player_pos3.x, player_pos3.y);
+
+        glm::vec2 to_player = player_pos - civ_pos;
+        float dist = glm::length(to_player);
+
+        // 看不看得到玩家（距离 20 + 视角）
+        bool can_see = civilian_can_see_player(c, player, 20.0f, 0.6f); 
+        // 0.6 大概是 53° 视角，自己可以调小/调大
+
+        // === 障碍物检测（TODO）===
+        // 这里你可以用自己的射线 or 碰撞检测：
+        // bool blocked = is_player_blocked(civ_pos3, player_pos3);
+        bool blocked = false; // 先默认没有障碍物，后面你可以换成真正的检测
+
+        if (can_see && !blocked && dist > 5.0f) {
+            // 距离比较远：原地看人
+            c.watching_player = true;
+        } else if (dist > 20.0f || blocked) {
+            // 出视野 / 被挡住：不再看
+            c.watching_player = false;
+        }
+
+        if (c.watching_player) {
+            // 切成站立状态（有过渡动画的话就正常用）
+            if (c.state != Civilian::STAND && c.state != Civilian::BETWEEN) {
+                civilian_set_state(c, Civilian::STAND);
+            }
+
+            // 更新动画（站立呼吸那种），但不移动位置
+            c.graph.update(elapsed * c.playback_speed);
+            for (auto &rig : c.rigs) {
+                rig->update(elapsed);
+            }
+
+            // 朝向玩家旋转
+            if (dist > 1e-3f) {
+                glm::vec2 dir = to_player / dist;
+                float yaw = std::atan2(dir.x, dir.y);
+                glm::quat target_rot =
+                    glm::angleAxis(yaw, glm::vec3(0, 0, 1)) * c.base_rotation;
+
+                c.transform->rotation = glm::slerp(
+                    c.transform->rotation,
+                    target_rot,
+                    1.0f - std::exp(-6.0f * elapsed)
+                );
+            }
+
+            // 原地不动
+            c.velocity = glm::vec2(0.0f);
+
+            // 非常重要：直接 return，后面就不会跑开 / 闲逛
+            return;
+        }
+
+        // 如果没在 watching_player，就继续往下走，可能触发“跑开”或正常闲逛
+    }
 	//11/24 update Alex Ding
 	// === RUN AWAY FROM PLAYER if close & player is in front ===
 	if (player) {

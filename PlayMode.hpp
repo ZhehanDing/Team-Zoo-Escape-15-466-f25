@@ -211,4 +211,5 @@ struct PlayMode : Mode {
 	float sound_hint_timer = 0.0f;   // seconds
 	bool pass_hint_active =false;
 	float pass_hint_timer = 200.0f;
+	bool cast_ray_blocked(glm::vec3 from, glm::vec3 to);
 };
