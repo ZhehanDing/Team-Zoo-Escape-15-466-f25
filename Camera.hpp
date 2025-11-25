@@ -3,6 +3,8 @@
 #include "Scene.hpp"
 #include <iostream>
 
+#include <glm/gtc/quaternion.hpp>
+
 struct Camera {
     Scene::Camera *main = nullptr;
     Scene::Transform *anchor = nullptr;
@@ -12,6 +14,7 @@ struct Camera {
     glm::vec2 yaw_range = glm::vec2(-(float) M_PI, (float)M_PI);
     float sensitivity = 2.f;
     float pitch, roll, yaw, distance;
+    bool rotate_anchor = false;
 
     void set_initial_look_radians(float pitch_, float roll_, float yaw_) {
         pitch = pitch_;
@@ -53,8 +56,10 @@ struct Camera {
             if (pitch > pitch_range.y) pitch = pitch_range.y;
             else if (pitch < pitch_range.x) pitch = pitch_range.x;
 
-            if (!main->transform->parent)
-                main->transform->rotation = glm::quat( glm::vec3 (pitch, roll, yaw) );
+            if (!main->transform->parent || !rotate_anchor) {
+                glm::quat to_world_rot = glm::quat_cast(glm::mat4(main->transform->parent->make_world_from_local()));
+                main->transform->rotation = glm::inverse(to_world_rot) * glm::quat( glm::vec3 (pitch, roll, yaw) );
+            }
             else {
                 main->transform->rotation = glm::quat(glm::vec3 (pitch, roll, 0.f));
                 glm::vec3 rot = glm::eulerAngles(main->transform->parent->rotation);

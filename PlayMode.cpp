@@ -25,6 +25,9 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
+
 #include <random>
 #include <map>
 #include <functional>
@@ -1214,10 +1217,9 @@ void PlayMode::update(float elapsed) {
 		if (dashing)
 		{
 			player->position += dash_dir * dash_speed * elapsed;
-		}
-		else
-		{
-			constexpr float PlayerSpeed = 1.0f;
+		} else {
+			constexpr float PlayerSpeed = 7.5f;
+			constexpr float RotationSpeed = .1f; // interp weight : between [0, 1]
 			glm::vec2 move = glm::vec2(0.0f);
 			if (left.pressed && !right.pressed)
 				move.x = -1.0f;
@@ -1228,16 +1230,42 @@ void PlayMode::update(float elapsed) {
 			if (!down.pressed && up.pressed)
 				move.y = 1.0f;
 
-			if (move != glm::vec2(0.0f))
-				move = glm::normalize(move) * PlayerSpeed * player_speed_factor * elapsed;
+			if (move != glm::vec2(0.0f)) {
+				move = glm::normalize(move);
 
-			glm::mat4x3 frame = player->make_parent_from_local();
-			glm::vec3 frame_right = -frame[0];
-			glm::vec3 frame_forward = -frame[1];
+				// compute new player rotation relative to camera
+				glm::vec3 forward_xy = glm::vec3 (
+					std::sinf(cam->yaw), 
+					-std::cos(cam->yaw), 
+					0.f);
+				glm::vec3 right_xy = glm::vec3 (
+					forward_xy.y, 
+					-forward_xy.x, 
+					0.f);
+				
+				glm::vec3 target_dir = -glm::normalize(
+					move.x * right_xy + move.y * forward_xy
+				);
 
-			if (move != glm::vec2(0.0f))
-			{
-				glm::vec3 new_pos = player->position + move.x * frame_right + move.y * frame_forward;
+				float target_yaw = std::atan2f(-target_dir.x, target_dir.y);
+				
+				// --! our axis are different than glm expected !--
+				float current_pitch = glm::pitch(player->rotation);
+				float current_roll = glm::yaw(player->rotation);
+				// float current_yaw = glm::roll(player->rotation);
+				
+				// slerp rotation
+				player->rotation = glm::slerp(
+					player->rotation,
+					glm::quat( glm::vec3(current_pitch, current_roll, target_yaw) ),
+					RotationSpeed
+				);
+
+				// get player forward
+				glm::vec3 player_forward = player->rotation * -glm::vec3(0.f, 1.f, 0.f);
+
+				glm::vec3 new_pos = player->position + player_forward * PlayerSpeed * player_speed_factor * elapsed;
+
 				// printf("Trying move to: %.2f, %.2f, %.2f\n", new_pos.x, new_pos.y, new_pos.z);
 
 				CollisionHits hits = query_world_collisions(
@@ -1255,6 +1283,7 @@ void PlayMode::update(float elapsed) {
 				{
 					player->position = new_pos;
 				}
+				cam->update_camera(glm::vec2(0.f));
 			}
 		}
 	}
@@ -1297,6 +1326,18 @@ void PlayMode::update(float elapsed) {
 			stalk_charge = 1.0f;
             execution_mode = true;
 		}
+
+		// force pitch and player model to look towards stalk direction
+		//  - pitch is forced since enemy pos does not vary vertically
+		glm::vec3 to_enemy = enemy->position - player->position;
+		
+		// control for position of enemy center on screen
+		float target_pitch_ratio = 1.f + .05f;
+		float target_pitch = (std::atan2f(to_enemy.z, std::sqrtf(to_enemy.x * to_enemy.x + to_enemy.y * to_enemy.y)) 
+			+ cam->pitch_range.x / 2.f) * target_pitch_ratio;
+
+		// smooth force camera pitch by lerp
+		cam->pitch = cam->pitch * .6f + target_pitch * .4f;
 	} 
 
 	// --- Enemy sensing: FOV + distance (+ optional LOS hook) ---
