@@ -72,6 +72,12 @@ Load< Sound::Sample > stalking_sample(LoadTagDefault, []() -> Sound::Sample cons
 Load< Sound::Sample > start_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("Start.wav"));
 });
+Load< Sound::Sample > attack_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Attack.wav"));
+});
+Load< Sound::Sample > enemy_die_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("EnemyDie.wav"));
+});
 
 Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
 	std::vector< std::string > filenames = {
@@ -889,7 +895,7 @@ void PlayMode::stop_footstep_loop()
 
 void PlayMode::start_stalking_loop()
 {
-	if (!stalking_loop && stalk_charge < 1.0f)
+	if (!stalking_loop)
 	{
 		stalking_loop = Sound::loop(*stalking_sample, 1.0f, 0.0f);
 	}
@@ -1103,6 +1109,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			return true;
 		} else if (evt.button.button == SDL_BUTTON_LEFT) {
 			if (execution_mode && execution_target) {
+				Sound::play(*attack_sample, 1.0f, 1.0f);
 
 				// Distance calculation
 				glm::vec3 player_pos = camera->transform->make_world_from_local()[3];
@@ -1111,7 +1118,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				float dist = glm::length(civ_pos - player_pos);
 				if (dist <= execution_range) {
 					// === EXECUTION SUCCESS ON CIVILIAN ===
-
+					Sound::play(*enemy_die_sample, 1.0f, 1.0f);
+					
 					execution_mode = false;
 					stalk_charge = 0.0f;
 
