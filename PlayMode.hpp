@@ -77,6 +77,19 @@ struct PlayMode : Mode {
 	float enemy_mesh_scale = 1.0f;
 	glm::vec3 enemy_mesh_offset = glm::vec3(0.0f);
 
+	// Deer Human
+	std::unique_ptr< Skeleton > deer_human_skeleton;
+	std::vector< std::unique_ptr< RiggedMesh > > deer_human_rigs;
+	std::vector< Scene::Drawable * > deer_human_drawables;
+	std::vector< uint32_t > deer_human_original_counts;
+	AnimationGraph< Skeleton::BoneTransform > deer_human_graph =
+		AnimationGraph< Skeleton::BoneTransform >(
+			[](Skeleton::BoneTransform const &a,
+			   Skeleton::BoneTransform const &,
+			   float) { return a; });
+	bool deer_human_moving = false;
+	bool is_deer_human = false;
+
 	// Gate
 	std::unique_ptr< RiggedMesh > gate_rig;
 	bool gate_can_open = false;

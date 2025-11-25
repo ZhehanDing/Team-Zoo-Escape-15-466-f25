@@ -158,6 +158,12 @@ const std::vector<NamedTexture> named_textures = {
     {"bob_inverted_bangs", "textures/bob_inverted_bangs.png"},
     {"littleright_hair_bobcut", "textures/littleright_hair_bobcut.png"},
     {"ponytail01", "textures/ponytail01.png"},
+    // Deer Human textures
+    {"elvs_antlers1", "textures/elvs_antlers1.png"},
+    {"mens_trouser_short_nc_elvcrf", "textures/mens_trouser_short_nc_elvcrf.png"},
+    {"eyebrow002", "textures/eyebrow002.png"},
+    {"eyelashes01", "textures/eyelashes01.png"},
+    {"heroine_boots_1", "textures/heroine_boots_1.png"},
 };
 
 Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> const *

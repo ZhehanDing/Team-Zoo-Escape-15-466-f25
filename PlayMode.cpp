@@ -197,6 +197,18 @@ Load<SkeletonBuffer> enemy_skeletons(LoadTagDefault, []() {
     return new SkeletonBuffer(data_path("enemy.skel"));
 });
 
+Load< MeshBuffer > deer_human_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	return new MeshBuffer(data_path("deer_human.pnct"));
+});
+
+Load< BoneInfluenceBuffer > deer_human_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
+	return new BoneInfluenceBuffer(data_path("deer_human.infl"));
+});
+
+Load<SkeletonBuffer> deer_human_skeletons(LoadTagDefault, []() {
+    return new SkeletonBuffer(data_path("deer_human.skel"));
+});
+
 Load< AnimationBuffer< Skeleton::BoneTransform > > human_animations(LoadTagDefault, []() -> AnimationBuffer< Skeleton::BoneTransform > const * {
 	return new AnimationBuffer< Skeleton::BoneTransform >(data_path("human.anim"));
 });
@@ -482,6 +494,71 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		}
 		
 		auto rig_ptr = enemy_rigs.back().get();
+		drawable.pipeline.set_uniforms = [rig_ptr]() {
+			rig_ptr->bind_pose_ubo();
+			glUniform1f(skinning_deferred_program->ROUGHNESS_float, 0.5f);
+		};
+	}
+
+	// Load deer human
+	Skeleton const &deer_human_skel = deer_human_skeletons->lookup("Human.rigify");
+	deer_human_skeleton = std::make_unique< Skeleton >(deer_human_skel);
+	
+	deer_human_graph = AnimationGraph< Skeleton::BoneTransform >(g);
+	deer_human_graph.add_state(human_animations->lookup("Stand"));
+	deer_human_graph.add_state(human_animations->lookup("Walk"));
+	deer_human_graph.add_state(human_animations->lookup("StandToWalk"));
+	deer_human_graph.add_state(human_animations->lookup("WalkToStand"));
+	auto deer_stand_it = deer_human_graph.states.find("Stand");
+	if (deer_stand_it != deer_human_graph.states.end()) {
+		deer_human_graph.current_state = &deer_stand_it->second;
+		deer_human_graph.playback = 0.0f;
+		deer_human_graph.keyframe_index = 0;
+	}
+		
+	std::vector<std::string> deer_human_mesh_names;
+	for (const auto& mesh_pair : deer_human_meshes->meshes) {
+		const std::string& mesh_name = mesh_pair.first;
+		if (mesh_name.find("WGT-") == 0) continue;
+		deer_human_mesh_names.push_back(mesh_name);
+	}
+	deer_human_rigs.clear();
+	deer_human_rigs.reserve(deer_human_mesh_names.size());
+	deer_human_drawables.clear();
+	deer_human_drawables.reserve(deer_human_mesh_names.size());
+	deer_human_original_counts.clear();
+	deer_human_original_counts.reserve(deer_human_mesh_names.size());
+	
+	for (const std::string& mesh_name : deer_human_mesh_names) {
+		const Mesh& mesh = deer_human_meshes->lookup(mesh_name);
+		deer_human_rigs.emplace_back(std::make_unique< RiggedMesh >(
+			deer_human_meshes->buffer, deer_human_infls->buffer, mesh, *deer_human_skeleton, &deer_human_graph));
+		deer_human_rigs.back()->anim_graph = &deer_human_graph;
+
+		scene.drawables.emplace_back(player);
+		Scene::Drawable &drawable = scene.drawables.back();
+		deer_human_drawables.push_back(&drawable);
+		deer_human_original_counts.push_back(mesh.count);
+		drawable.pipeline = skinning_deferred_program_pipeline;
+		drawable.pipeline.vao = deer_human_rigs.back()->make_vao_for_program(skinning_deferred_program->program);
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;
+		
+		for (size_t i = 0; i < named_textures.size(); ++i) {
+			if (mesh_name == named_textures[i].prefix || mesh_name.rfind(named_textures[i].prefix, 0) == 0) {
+				if (i < textures->size()) {
+					GLuint tex_id = (*textures)[i];
+					if (tex_id != 0) {
+						drawable.pipeline.textures[0].texture = tex_id;
+						drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+						break;
+					}
+				}
+			}
+		}
+		
+		auto rig_ptr = deer_human_rigs.back().get();
 		drawable.pipeline.set_uniforms = [rig_ptr]() {
 			rig_ptr->bind_pose_ubo();
 			glUniform1f(skinning_deferred_program->ROUGHNESS_float, 0.5f);
@@ -868,6 +945,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		// TODO: Delete later! For testing purposes
 		else if (evt.key.key == SDLK_X)
 		{
+			is_deer_human = true;
 			enemy_to_dead();
 			return true;
 		}
@@ -1017,6 +1095,83 @@ void PlayMode::update(float elapsed) {
 	}
 	enemy->scale = glm::vec3(1.5f);
 	enemy_graph.update(elapsed);
+	
+	// Update deer human
+	if (is_deer_human) {
+		final_deer->scale = glm::vec3(0.0f);
+		final_deer_leg->scale = glm::vec3(0.0f);
+		player->scale = glm::vec3(1.3f);	
+		bool player_is_moving = (left.pressed || right.pressed || up.pressed || down.pressed) && !dashing;
+		
+		// Update animation state
+		auto set_deer_state = [&](const std::string& state_name) {
+			auto state_it = deer_human_graph.states.find(state_name);
+			if (state_it != deer_human_graph.states.end() && deer_human_graph.current_state != &state_it->second) {
+				// Check if we need a transition
+				if (deer_human_moving && state_name == "Stand") {
+					auto walk_to_stand_it = deer_human_graph.states.find("WalkToStand");
+					if (walk_to_stand_it != deer_human_graph.states.end()) {
+						deer_human_graph.current_state = &walk_to_stand_it->second;
+					} else {
+						deer_human_graph.current_state = &state_it->second;
+					}
+					deer_human_graph.playback = 0.0f;
+					deer_human_graph.keyframe_index = 0;
+				} else if (!deer_human_moving && state_name == "Walk") {
+					auto stand_to_walk_it = deer_human_graph.states.find("StandToWalk");
+					if (stand_to_walk_it != deer_human_graph.states.end()) {
+						deer_human_graph.current_state = &stand_to_walk_it->second;
+					} else {
+						deer_human_graph.current_state = &state_it->second;
+					}
+					deer_human_graph.playback = 0.0f;
+					deer_human_graph.keyframe_index = 0;
+				} else {
+					deer_human_graph.current_state = &state_it->second;
+				}
+			}
+		};
+		
+		// Handle transition
+		if (deer_human_graph.current_state) {
+			auto& cur_state = *deer_human_graph.current_state;
+			if (cur_state.animation.name == "StandToWalk") {
+				if (deer_human_graph.playback >= cur_state.animation.get_anim_length()) {
+					set_deer_state("Walk");
+				}
+			} else if (cur_state.animation.name == "WalkToStand") {
+				if (deer_human_graph.playback >= cur_state.animation.get_anim_length()) {
+					set_deer_state("Stand");
+				}
+			}
+		}
+		
+		if (player_is_moving && !deer_human_moving) {
+			set_deer_state("Walk");
+			deer_human_moving = true;
+		} else if (!player_is_moving && deer_human_moving) {
+			set_deer_state("Stand");
+			deer_human_moving = false;
+		}
+		
+		deer_human_graph.update(elapsed);
+		
+		for (auto& rig : deer_human_rigs) {
+			rig->update(elapsed);
+		}
+		
+		for (size_t i = 0; i < deer_human_drawables.size() && i < deer_human_original_counts.size(); ++i) {
+			if (deer_human_drawables[i]) {
+				deer_human_drawables[i]->pipeline.count = deer_human_original_counts[i];
+			}
+		}
+	} else {
+		for (Scene::Drawable *drawable : deer_human_drawables) {
+			if (drawable) {
+				drawable->pipeline.count = 0;
+			}
+		}
+	}
 
 	for (auto& rig : enemy_rigs) {
 		rig->update(elapsed);
@@ -1664,6 +1819,42 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			}
 		}
 		glActiveTexture(GL_TEXTURE0);
+	}
+	
+	// Draw deer_human only if active
+	if (is_deer_human) {
+		for (Scene::Drawable *drawable : deer_human_drawables) {
+		
+		Scene::Drawable::Pipeline const &pipeline = drawable->pipeline;
+		glUseProgram(pipeline.program);
+		glBindVertexArray(pipeline.vao);
+		
+		glm::mat4x3 world_from_object = drawable->transform->make_world_from_local();
+		glm::mat4 clip_from_object = clip_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4fv(pipeline.CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_object));
+		glm::mat4x3 light_from_object = light_from_world * glm::mat4(world_from_object);
+		glUniformMatrix4x3fv(pipeline.LIGHT_FROM_OBJECT_mat4x3, 1, GL_FALSE, glm::value_ptr(light_from_object));
+		glm::mat3 light_from_normal = glm::inverse(glm::transpose(glm::mat3(light_from_object)));
+		glUniformMatrix3fv(pipeline.LIGHT_FROM_NORMAL_mat3, 1, GL_FALSE, glm::value_ptr(light_from_normal));
+		pipeline.set_uniforms();
+		
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, pipeline.textures[i].texture);
+			}
+		}
+		
+		glDrawArrays(pipeline.type, pipeline.start, pipeline.count);
+		
+		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
+			if (pipeline.textures[i].texture != 0) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(pipeline.textures[i].target, 0);
+			}
+		}
+		glActiveTexture(GL_TEXTURE0);
+		}
 	}
 	
 	// Draw civilian
