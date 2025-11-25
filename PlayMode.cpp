@@ -1136,14 +1136,14 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 					if (!dash_skill && kill_count >= 1) {
 						dash_skill = true;
 						dash_hint_active = true;
-						dash_hint_timer = 2.0f;   // show "PRESS SPACE TO DASH" for 2 seconds
+						dash_hint_timer = 3.0f;   // show "PRESS SPACE TO DASH" for 3 seconds
 					}
 
 					// Unlock attraction sound on second kill (only once)
 					if (!attraction_ability && kill_count >= 2) {
 						attraction_ability = true;
 						sound_hint_active = true;
-						sound_hint_timer = 2.0f;  // show "PRESS G TO Make Attraction" for 2 seconds
+						sound_hint_timer = 3.0f;  // show "PRESS G TO Make Attraction" for 3 seconds
 					}
 
 					if (!pass_hint_active && kill_count >= 5) {
@@ -2370,7 +2370,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
 
 			lines.draw_text(
-				"PRESS G TO Make Attraction",
+				"PRESS G TO Attract Human",
 				anchor,
 				x_dir,
 				y_dir,
