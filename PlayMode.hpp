@@ -205,6 +205,7 @@ struct PlayMode : Mode {
 	std::shared_ptr<Sound::PlayingSample> bg_loop;
 	std::shared_ptr<Sound::PlayingSample> footstep_loop = nullptr;
 	std::shared_ptr<Sound::PlayingSample> stalking_loop = nullptr;
+	std::shared_ptr<Sound::PlayingSample> watched_playing = nullptr;
 	void start_footstep_loop();
 	void stop_footstep_loop();
 	void start_stalking_loop();

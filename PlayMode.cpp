@@ -81,7 +81,9 @@ Load< Sound::Sample > enemy_die_sample(LoadTagDefault, []() -> Sound::Sample con
 Load< Sound::Sample > watched_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("Watched.wav"));
 });
-
+Load< Sound::Sample > dash_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Dash.wav"));
+});
 
 Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
 	std::vector< std::string > filenames = {
@@ -988,6 +990,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				dash_dir = glm::normalize(frame_forward);
 
 				dashing = true;
+				Sound::play(*dash_sample, 1.0f, 0.0f);
 				dash_timer = dash_duration;
 				dash_cooldown_timer = dash_cooldown;
 
@@ -1050,7 +1053,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		}
 		else if (evt.key.key == SDLK_P && !gate_can_open)
 		{
-			Sound::play_3D(*gate_open_sample, 1.2f, gate->position, 30.0f);
+			Sound::play_3D(*gate_open_sample, 1.2f, gate->position, 60.0f);
 
     		gate_anim_playing = true; 
 			gate_can_open = true; // TODO: need a condition for this to be true
@@ -1560,6 +1563,7 @@ void PlayMode::update(float elapsed) {
 			bool blocked = occluded_civ_to_player();
 
 			if (in_fov && !blocked) {
+				if (!watched_playing) watched_playing = Sound::play(*watched_sample, 1.0f, 0.0f);
 				being_watched = true;
 				watching_civilian = &civ;     // remember this civilian
 				civ.watching_player = true;   // put them in watch mode (no movement)
@@ -1575,9 +1579,19 @@ void PlayMode::update(float elapsed) {
 		if (watched_accum >= watch_to_gameover) {
 			trigger_game_over();
 		}
-	} else {
-			// continuous requirement: reset if not watched this frame
-			watched_accum = 0.0f;
+	}
+	else
+	{
+		// continuous requirement: reset if not watched this frame
+		watched_accum = 0.0f;
+		if (watched_playing && watched_playing->stopped)
+		{
+			watched_playing.reset();
+		}
+		else if (!watched_playing)
+		{
+			// already reset: do nothing
+		}
 	}
 
 	// --- Enemy behavior: Stand-and-watch vs Patrol ---
