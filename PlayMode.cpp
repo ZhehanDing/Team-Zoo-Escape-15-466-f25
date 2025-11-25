@@ -60,6 +60,9 @@ Load< Sound::Sample > bg_sample(LoadTagDefault, []() -> Sound::Sample const * {
 Load< Sound::Sample > gate_open(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("GateOpen.wav"));
 });
+Load< Sound::Sample > footstep_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("FootStep.wav"));
+});
 
 Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
 	std::vector< std::string > filenames = {
@@ -856,6 +859,25 @@ PlayMode::~PlayMode() {
 
 }
 
+void PlayMode::start_footstep()
+{
+	if (!footstep_loop)
+	{
+		footstep_loop = Sound::loop(*footstep_sample, 2.0f, 0.0f);
+	}
+}
+
+void PlayMode::stop_footstep()
+{
+	if (footstep_loop &&
+		!left.pressed && !right.pressed &&
+		!up.pressed && !down.pressed)
+	{
+		footstep_loop->stop();
+		footstep_loop.reset();
+	}
+}
+
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
 	//update 11/24 Alex Ding
 	// --- MAIN MENU INPUT ---
@@ -899,18 +921,22 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		} else if (evt.key.key == SDLK_A) {
 			left.downs += 1;
 			left.pressed = true;
+			start_footstep();
 			return true;
 		} else if (evt.key.key == SDLK_D) {
 			right.downs += 1;
 			right.pressed = true;
+			start_footstep();
 			return true;
 		} else if (evt.key.key == SDLK_W) {
 			up.downs += 1;
 			up.pressed = true;
+			start_footstep();
 			return true;
 		} else if (evt.key.key == SDLK_S) {
 			down.downs += 1;
 			down.pressed = true;
+			start_footstep();
 			return true;
 		}else if (evt.key.key == SDLK_SPACE) {
 			// Start dash if unlocked, not already dashing, and off cooldown
@@ -1019,15 +1045,19 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
 		if (evt.key.key == SDLK_A) {
 			left.pressed = false;
+			stop_footstep();
 			return true;
 		} else if (evt.key.key == SDLK_D) {
 			right.pressed = false;
+			stop_footstep();
 			return true;
 		} else if (evt.key.key == SDLK_W) {
 			up.pressed = false;
+			stop_footstep();
 			return true;
 		} else if (evt.key.key == SDLK_S) {
 			down.pressed = false;
+			stop_footstep();
 			return true;
 		}
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
@@ -1132,7 +1162,13 @@ void PlayMode::update(float elapsed) {
 		// camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 		return;
 	}
-	
+
+	// Sound
+	if (footstep_loop)
+	{
+		footstep_loop->set_position(player->position);
+	}
+
 	// --- Dash timers ---
 	if (dash_cooldown_timer > 0.0f) {
 		dash_cooldown_timer = std::max(0.0f, dash_cooldown_timer - elapsed);
