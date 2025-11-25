@@ -78,6 +78,10 @@ Load< Sound::Sample > attack_sample(LoadTagDefault, []() -> Sound::Sample const 
 Load< Sound::Sample > enemy_die_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("EnemyDie.wav"));
 });
+Load< Sound::Sample > watched_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Watched.wav"));
+});
+
 
 Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
 	std::vector< std::string > filenames = {
@@ -920,7 +924,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
             // Press ENTER to start the game
             if (evt.key.key == SDLK_RETURN || evt.key.key == SDLK_SPACE) {
                 screen_state = ScreenState::PLAYING;
-				Sound::play(*start_sample, 1.0f, 1.0f);
+				Sound::play(*start_sample, 1.0f, 0.0f);
 
                 // (Optional) capture mouse when the game actually starts:
                 SDL_SetWindowRelativeMouseMode(Mode::window, true);
@@ -1109,7 +1113,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			return true;
 		} else if (evt.button.button == SDL_BUTTON_LEFT) {
 			if (execution_mode && execution_target) {
-				Sound::play(*attack_sample, 1.0f, 1.0f);
+				Sound::play(*attack_sample, 1.0f, 0.0f);
 
 				// Distance calculation
 				glm::vec3 player_pos = camera->transform->make_world_from_local()[3];
@@ -1118,7 +1122,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				float dist = glm::length(civ_pos - player_pos);
 				if (dist <= execution_range) {
 					// === EXECUTION SUCCESS ON CIVILIAN ===
-					Sound::play(*enemy_die_sample, 1.0f, 1.0f);
+					Sound::play(*enemy_die_sample, 1.0f, 0.0f);
 					
 					execution_mode = false;
 					stalk_charge = 0.0f;
@@ -1502,7 +1506,7 @@ void PlayMode::update(float elapsed) {
 		{
 			stalk_charge = 1.0f;
 			execution_mode = true;
-			Sound::play(*stalking_completed_sample, 0.8f, 1.0f);
+			Sound::play(*stalking_completed_sample, 0.8f, 0.0f);
 		}
 		else if (stalk_charge > 1.0f)
 		{
