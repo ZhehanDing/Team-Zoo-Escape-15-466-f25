@@ -203,5 +203,4 @@ struct PlayMode : Mode {
 
 	// Sound
 	std::shared_ptr<Sound::PlayingSample> bg_loop;
-	glm::vec3 origin = glm::vec3(0.0f, 0.0f, 0.0f);
 };

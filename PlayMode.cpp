@@ -57,6 +57,9 @@ Load< Sound::Sample > attraction_voice_4(LoadTagDefault, []() -> Sound::Sample c
 Load< Sound::Sample > bg_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("BackgroundMusic.wav"));
 });
+Load< Sound::Sample > gate_open(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("GateOpen.wav"));
+});
 
 Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
@@ -946,6 +949,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		}
 		else if (evt.key.key == SDLK_P && !gate_can_open)
 		{
+			// Sound::play_3D(*gate_open, 1.0f, 1.0f);
+			Sound::play_3D(*gate_open, 1.0f, gate->position, 30.0f);
+
     		gate_anim_playing = true; 
 			gate_can_open = true; // TODO: need a condition for this to be true
 
