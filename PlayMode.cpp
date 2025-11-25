@@ -1066,14 +1066,24 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 
 					// clear current target so we don't keep reusing it
 					execution_target = nullptr;
-					if (kill_count >= 1) {
+					if (!dash_skill && kill_count >= 1) {
 						dash_skill = true;
+						dash_hint_active = true;
+						dash_hint_timer = 2.0f;   // show "PRESS SPACE TO DASH" for 2 seconds
 					}
 
-					// keep your deer_stage / reward logic as-is:
-					if (kill_count >= 2) {
+					// Unlock attraction sound on second kill (only once)
+					if (!attraction_ability && kill_count >= 2) {
 						attraction_ability = true;
+						sound_hint_active = true;
+						sound_hint_timer = 2.0f;  // show "PRESS G TO Make Attraction" for 2 seconds
 					}
+
+					if (!pass_hint_active && kill_count >= 5) {
+						pass_hint_active = true;
+						is_deer_human = true;
+					}
+
 
 					if (deer_stage == 0) {
 						final_deer->scale = glm::vec3(0.0f);  // hide original deer
@@ -1137,7 +1147,27 @@ void PlayMode::update(float elapsed) {
 	if (attraction_cooldown_timer > 0.0f) {
     attraction_cooldown_timer = std::max(0.0f, attraction_cooldown_timer - elapsed);
 	}
-
+	//11/24 Update Alex Ding
+	//Tutor word
+	if (dash_hint_active) {
+    dash_hint_timer -= elapsed;
+    if (dash_hint_timer <= 0.0f) {
+        dash_hint_active = false;
+    	}
+	}
+	if (sound_hint_active) {
+    sound_hint_timer -= elapsed;
+    if (sound_hint_timer <= 0.0f) {
+        sound_hint_active = false;
+    	}
+	}
+	if (pass_hint_active) {
+    pass_hint_timer -= elapsed;
+    if (pass_hint_timer <= 0.0f) {
+        pass_hint_active = false;
+    	}
+	}
+	//
 	if (enemy_fade_timer > 0.0f) {
 		enemy_fade_timer = std::max(0.0f, enemy_fade_timer - elapsed);
 		float fade_progress = 1.0f - (enemy_fade_timer / enemy_fade_duration);
@@ -2065,7 +2095,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			}
 		}
 	}
-
+	
 	// draw aim indicator / outline on target civilian in focus mode
 	if (focus_mode && execution_target && enemy_visible) {
 		glm::mat4 clip_from_world =
@@ -2187,7 +2217,97 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			0.0f, 0.0f, 0.0f, 1.0f));
 
 		constexpr float H = 0.05f;
+		// 11/24 update Alex Ding
+		// --- Kill counter UI: top-right, only while PLAYING ---
+		if (screen_state == ScreenState::PLAYING) {
+			std::string kill_text = std::to_string(kill_count) + "/5";
 
+			glm::u8vec4 kc_color = glm::u8vec4(0xff, 0xff, 0xff, 0xff);
+
+			// position near top-right of the screen:
+			float x = aspect - 4.0f * H;   // a bit from right edge
+			float y = 1.0f - 2.0f * H;     // a bit down from top
+
+			lines.draw_text(
+				kill_text,
+				glm::vec3(x, y, 0.0f),
+				glm::vec3(H*2.0f, 0.0f, 0.0f),   // x-step
+				glm::vec3(0.0f, H*2.0f, 0.0f),   // y-step
+				kc_color
+			);
+		}
+		// --- Dash Tutor Word showed up ---
+		//11/24 update Alex Ding
+		if (dash_hint_active) {
+			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
+
+			// ---- Center of screen ----
+			glm::vec3 anchor = glm::vec3(-0.3f, 0.0f, 0.0f);
+
+			// ---- BIG text scale ----
+			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
+			float pulse     = 0.5f + 0.5f * std::cos(dash_hint_timer * 4.0f);
+			float size      = 0.1f * (0.8f + 0.4f * pulse);
+			glm::vec3 x_dir = glm::vec3(size, 0.0f, 0.0f);   // width
+			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
+
+			lines.draw_text(
+				"PRESS SPACE TO DASH",
+				anchor,
+				x_dir,
+				y_dir,
+				hint_color,
+				nullptr
+				); // color
+		}
+
+		if (sound_hint_active) {
+			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
+
+			// ---- Center of screen ----
+			glm::vec3 anchor = glm::vec3(-0.4f, 0.0f, 0.0f);
+
+			// ---- BIG text scale ----
+			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
+
+			float pulse     = 0.5f + 0.5f * std::cos(sound_hint_timer * 4.0f);
+			float size      = 0.1f * (0.8f + 0.4f * pulse);
+			glm::vec3 x_dir = glm::vec3(size, 0.0f, 0.0f);   // width
+			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
+
+			lines.draw_text(
+				"PRESS G TO Make Attraction",
+				anchor,
+				x_dir,
+				y_dir,
+				hint_color,
+				nullptr
+				); // color
+		}
+
+		if (pass_hint_active) {
+			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
+
+			// ---- Center of screen ----
+			glm::vec3 anchor = glm::vec3(-0.3f, 0.0f, 0.0f);
+
+			// ---- BIG text scale ----
+			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
+			float pulse     = 0.5f + 0.5f * std::cos(pass_hint_timer * 4.0f);
+			float size      = 0.1f * (0.8f + 0.4f * pulse);
+			glm::vec3 x_dir = glm::vec3(size, 0.0f, 0.0f);   // width
+			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
+
+			lines.draw_text(
+				"Gate is opened! Time to Run Away!",
+				anchor,
+				x_dir,
+				y_dir,
+				hint_color,
+				nullptr
+				); // color
+		}
+	
 		if (game_success)
 		{
 			lines.draw_text("You escaped the zoo... You are free!",

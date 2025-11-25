@@ -183,7 +183,7 @@ struct PlayMode : Mode {
 	// Kill count & Dash skill unlock
 	int kill_count = 0;
 	bool dash_skill = false;
-	bool attraction_ability = true;  // unlocked after killing at least 2 enemies
+	bool attraction_ability = false;  // unlocked after killing at least 2 enemies
 	bool  dashing = false;
 	float dash_timer = 0.0f;       // remaining dash time (sec)
 	float dash_duration = 0.18f;   // how long a dash lasts
@@ -203,4 +203,12 @@ struct PlayMode : Mode {
 
 	// Sound
 	std::shared_ptr<Sound::PlayingSample> bg_loop;
+	//11/24 Update Alex Ding
+	// UI hint for dash unlock
+	bool dash_hint_active = false;
+	float dash_hint_timer = 0.0f;   // seconds
+	bool sound_hint_active =false;
+	float sound_hint_timer = 0.0f;   // seconds
+	bool pass_hint_active =false;
+	float pass_hint_timer = 200.0f;
 };
