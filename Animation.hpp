@@ -14,6 +14,11 @@ struct Keyframe {
 };
 static_assert(sizeof(Keyframe) == 12);
 
+struct AnimationEvent {
+    float time;
+    std::function< void() > event;
+};
+
 template<typename T>
 struct Animation {
     std::string name;
@@ -36,6 +41,11 @@ struct Animation {
     bool add_keyframes(const std::vector< T > &buffer, 
         const std::vector< float > &times,
         const std::vector< std::string > &property_names={}); 
+    
+    bool add_event (float time, std::function< void() > event);
+    bool add_event (uint32_t frame, std::function< void() > event) {
+        add_event(frame / fps, event);
+    };
 
     void set_loop (bool do_loop);
 
@@ -43,6 +53,7 @@ struct Animation {
     Animation(std::string name, uint32_t fps, bool loop) : name(name), fps(fps), loop(loop) { };
 
     // -- internals --
+    std::vector< AnimationEvent > events;
     std::vector< T > data;
     std::vector< Keyframe > keyframes;
     std::vector < std::string > index_to_name;
@@ -70,6 +81,7 @@ struct AnimationGraph {
 
     State *current_state = nullptr;
     uint32_t keyframe_index = 0;
+    uint32_t event_index = 0;
 
     float playback = 0;
 
@@ -162,6 +174,17 @@ bool Animation< T >::add_keyframes(const std::vector< T > &buffer, const std::ve
 
     return true;
 } 
+
+template <typename T>
+bool Animation< T >::add_event(float time, std::function< void() > event) {
+    if ((!events.empty() && time <= events.back().time) || time > keyframes.back().time) {
+        std::cerr << "WARNING: event time is not strictly increasing or not within keyframe times" << std::endl;
+        return false;
+    }
+
+    events.emplace_back(AnimationEvent(time, event));
+    return true;
+}
 
 template <typename T>
 AnimationBuffer< T >::AnimationBuffer(std::string const &filename, bool loop) {
@@ -302,6 +325,7 @@ void AnimationGraph< T >::update(float elapsed) {
     const Animation< T > &animation = current_state->animation;
     float anim_length = animation.get_anim_length();
     size_t key_count = animation.get_keyframe_count();
+    size_t event_count = animation.events.size();
 
     if (playback < anim_length) {
         playback += elapsed;
@@ -311,6 +335,7 @@ void AnimationGraph< T >::update(float elapsed) {
         if (animation.loop) {
             playback = 0;
             keyframe_index = 0;
+            event_index = 0;
         }
         else {
             playback = std::min(playback, anim_length);
@@ -319,6 +344,11 @@ void AnimationGraph< T >::update(float elapsed) {
 
     while (keyframe_index < key_count - 1 && playback >= animation.keyframes[keyframe_index + 1].time) 
         keyframe_index++;
+
+    while (event_index < event_count && playback >= animation.events[event_index].time) {
+        animation.events[event_index].event();
+        event_index++;
+    }
 
     for (auto transition : current_state->transitions) {
         if ((transition.first)(*this)) {
@@ -330,6 +360,7 @@ void AnimationGraph< T >::update(float elapsed) {
             current_state = &(it->second);
             playback = 0.f;
             keyframe_index = 0;
+            event_index = 0;
             return;
         }
     }
