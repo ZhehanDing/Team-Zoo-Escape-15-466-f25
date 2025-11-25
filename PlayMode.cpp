@@ -1733,56 +1733,54 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	//11/24 update Alex Ding
 	// --- MAIN MENU SCREEN ---
     if (screen_state == ScreenState::MENU) {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, drawable_size.x, drawable_size.y);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, drawable_size.x, drawable_size.y);
 
-        glDisable(GL_DEPTH_TEST);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        float aspect = float(drawable_size.x) / float(drawable_size.y);
+	float aspect = float(drawable_size.x) / float(drawable_size.y);
 
-        DrawLines lines(glm::mat4(
-            1.0f / aspect, 0.0f,        0.0f, 0.0f,
-            0.0f,         1.0f,         0.0f, 0.0f,
-            0.0f,         0.0f,         1.0f, 0.0f,
-            0.0f,         0.0f,         0.0f, 1.0f
-        ));
+	DrawLines lines(glm::mat4(
+		1.0f / aspect, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f));
 
-        glm::u8vec4 white = glm::u8vec4(0xff, 0xff, 0xff, 0xff);
+	glm::u8vec4 white = glm::u8vec4(0xff, 0xff, 0xff, 0xff);
 
-        constexpr float H = 0.09f;
+	constexpr float H = 0.09f;
+	float H_small = H * 0.6f;
+	float left_x = -0.9f * aspect;
 
-        // Title
-        lines.draw_text(
-            "ZOO ESCAPE",
-            glm::vec3(-0.9f, 0.5f, 0.0f),
-            glm::vec3(H, 0.0f, 0.0f),
-            glm::vec3(0.0f, H, 0.0f),
-            white
-        );
+	// Title
+	lines.draw_text(
+		"ZOO ESCAPE",
+		glm::vec3(left_x, 0.5f, 0.0f),
+		glm::vec3(H, 0.0f, 0.0f),
+		glm::vec3(0.0f, H, 0.0f),
+		white);
 
-        // "Play" instruction
-        lines.draw_text(
-            "Press ENTER to Play",
-            glm::vec3(-0.9f, 0.1f, 0.0f),
-            glm::vec3(H * 0.6f, 0.0f, 0.0f),
-            glm::vec3(0.0f,  H * 0.6f, 0.0f),
-            white
-        );
+	// "Play" instruction
+	lines.draw_text(
+		"Press ENTER to Play",
+		glm::vec3(left_x, 0.1f, 0.0f),
+		glm::vec3(H_small, 0.0f, 0.0f),
+		glm::vec3(0.0f, H_small, 0.0f),
+		white);
 
-        // "Quit" instruction
-        lines.draw_text(
-            "Press ESC to Quit",
-            glm::vec3(-0.9f, -0.1f, 0.0f),
-            glm::vec3(H * 0.6f, 0.0f, 0.0f),
-            glm::vec3(0.0f,  H * 0.6f, 0.0f),
-            white
-        );
+	// "Quit" instruction
+	lines.draw_text(
+		"Press ESC to Quit",
+		glm::vec3(left_x, -0.1f, 0.0f),
+		glm::vec3(H_small, 0.0f, 0.0f),
+		glm::vec3(0.0f, H_small, 0.0f),
+		white);
 
-        glEnable(GL_DEPTH_TEST);
-        return; // important: don't draw the 3D scene
-    }
+	glEnable(GL_DEPTH_TEST);
+	return; // important: don't draw the 3D scene
+	}
 	//11/23 Update
 	// --- GAME OVER SCREEN: clear everything and only draw text ---
 	if (game_over) {
@@ -2334,6 +2332,16 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 				glm::vec3(0.0f, H*2.0f, 0.0f),   // y-step
 				kc_color
 			);
+
+			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
+							glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0x00, 0x00, 0x00, 0xff));
+			float ofs = 2.0f / drawable_size.y;
+			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
+							glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+							glm::u8vec4(0xff, 0xff, 0xff, 0xff));
 		}
 		// --- Dash Tutor Word showed up ---
 		//11/24 update Alex Ding
@@ -2429,17 +2437,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 				y_dir,
 				hint_color,
 				nullptr
-				); // color
-
-			// lines.draw_text("You escaped the zoo... You are free!",
-			// 				glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			// 				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			// 				glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-			// float ofs = 2.0f / drawable_size.y;
-			// lines.draw_text("You escaped the zoo... You are free!",
-			// 				glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
-			// 				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			// 				glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+				);
 		}
 		else
 		{
