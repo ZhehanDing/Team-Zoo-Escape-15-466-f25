@@ -2404,15 +2404,37 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	
 		if (game_success)
 		{
-			lines.draw_text("You escaped the zoo... You are free!",
-							glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-							glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-			float ofs = 2.0f / drawable_size.y;
-			lines.draw_text("You escaped the zoo... You are free!",
-							glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
-							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-							glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+			pass_hint_active = false;
+			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
+
+			// ---- Center of screen ----
+			glm::vec3 anchor = glm::vec3(-0.3f, 0.0f, 0.0f);
+
+			// ---- BIG text scale ----
+			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
+			float pulse     = 0.5f + 0.5f * std::cos(pass_hint_timer * 4.0f);
+			float size      = 0.1f * (0.8f + 0.4f * pulse);
+			glm::vec3 x_dir = glm::vec3(size, 0.0f, 0.0f);   // width
+			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
+
+			lines.draw_text(
+				"You escaped the zoo... You are free!",
+				anchor,
+				x_dir,
+				y_dir,
+				hint_color,
+				nullptr
+				); // color
+
+			// lines.draw_text("You escaped the zoo... You are free!",
+			// 				glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+			// 				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+			// 				glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+			// float ofs = 2.0f / drawable_size.y;
+			// lines.draw_text("You escaped the zoo... You are free!",
+			// 				glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+			// 				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+			// 				glm::u8vec4(0xff, 0xff, 0xff, 0x00));
 		}
 		else
 		{

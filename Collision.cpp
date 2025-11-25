@@ -24,7 +24,7 @@ namespace { // bounds for the playable area
     constexpr float MIN_Y = -80.0f;
     constexpr float MAX_Y = 90.0f;
     constexpr float MAX_X = 70.0f;
-    constexpr float SUCCESS_X = -125.0f;
+    constexpr float SUCCESS_X = -100.0f;
 }
 
 // --- Public function used by PlayMode.cpp ---
