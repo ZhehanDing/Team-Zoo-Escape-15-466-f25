@@ -69,6 +69,9 @@ Load< Sound::Sample > stalking_completed_sample(LoadTagDefault, []() -> Sound::S
 Load< Sound::Sample > stalking_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("Stalking.wav"));
 });
+Load< Sound::Sample > start_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Start.wav"));
+});
 
 Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
 	std::vector< std::string > filenames = {
@@ -911,6 +914,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
             // Press ENTER to start the game
             if (evt.key.key == SDLK_RETURN || evt.key.key == SDLK_SPACE) {
                 screen_state = ScreenState::PLAYING;
+				Sound::play(*start_sample, 1.0f, 1.0f);
 
                 // (Optional) capture mouse when the game actually starts:
                 SDL_SetWindowRelativeMouseMode(Mode::window, true);
@@ -1036,7 +1040,6 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		}
 		else if (evt.key.key == SDLK_P && !gate_can_open)
 		{
-			// Sound::play_3D(*gate_open_sample, 1.0f, 1.0f);
 			Sound::play_3D(*gate_open_sample, 1.2f, gate->position, 30.0f);
 
     		gate_anim_playing = true; 
