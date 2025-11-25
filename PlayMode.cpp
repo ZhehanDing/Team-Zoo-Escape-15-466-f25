@@ -61,6 +61,23 @@ Load< Sound::Sample > gate_open(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("GateOpen.wav"));
 });
 
+Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
+	std::vector< std::string > filenames = {
+        "sounds/footsteps-01.wav", "sounds/footsteps-02.wav", "sounds/footsteps-03.wav",
+		"sounds/footsteps-04.wav", "sounds/footsteps-05.wav", "sounds/footsteps-06.wav",
+		"sounds/footsteps-07.wav", "sounds/footsteps-08.wav", "sounds/footsteps-09.wav",
+		"sounds/footsteps-10.wav", "sounds/footsteps-11.wav",
+    };
+    auto ret = new std::vector< Sound::Sample >();
+    ret->reserve(filenames.size());
+
+    for (size_t i = 0; i < filenames.size(); ++i) {
+        ret->emplace_back(Sound::Sample(data_path(filenames[i])));
+    }
+
+    return ret;
+});
+
 Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
 	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
@@ -399,7 +416,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
 	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
 
-	bg_loop = Sound::loop(*bg_sample, 1.0f, 0.0f);
+	bg_loop = Sound::loop(*bg_sample, .75f, 0.0f);
 
 	scene.drawables.remove_if([this](Scene::Drawable const &drawable) {
 		return drawable.transform == enemy;
@@ -665,6 +682,24 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		float yaw = rand(civilian.rng, 0.0f, 2.0f * 3.14f);
 		civilian.transform->rotation = glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f));
 		civilian.base_rotation = civilian.transform->rotation;
+
+		// assign sounds to animations
+		civilian.graph.playback = rand(civilians_rng, 0.f, civilian.graph.current_state->animation.get_anim_length());
+		for (float time : { .1666f, .7083f }) {
+			civilian.anim_buffer->animations.find("Walk")->second.add_event(time, [&civilian]() {
+				std::mt19937 dev;
+				size_t i = (size_t)(rand(dev, 0.f, (float)footstep_sounds->size()));
+				Sound::play_3D(footstep_sounds->at(i), .8f, civilian.transform->position, 5.f);
+			});
+		}
+
+		for (float time : { .0833f, .5416f }) {
+			civilian.anim_buffer->animations.find("Run")->second.add_event(time, [&civilian]() {
+				std::mt19937 dev;
+				size_t i = (size_t)(rand(dev, 0.f, (float)footstep_sounds->size()));
+				Sound::play_3D(footstep_sounds->at(i), .8f, civilian.transform->position, 5.f);
+			});
+		}
 	}
 
 	// Gate
@@ -781,6 +816,7 @@ void PlayMode::trigger_game_over() {
 	if (game_over) return; // idempotent
 	
 	game_over = true;
+	Sound::stop_all_samples();
 }
 
 void PlayMode::trigger_game_success() {

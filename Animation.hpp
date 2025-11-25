@@ -43,8 +43,8 @@ struct Animation {
         const std::vector< std::string > &property_names={}); 
     
     bool add_event (float time, std::function< void() > event);
-    bool add_event (uint32_t frame, std::function< void() > event) {
-        add_event(frame / fps, event);
+    bool add_event_frame (uint32_t frame, std::function< void() > event) {
+        return add_event((float) frame / fps, event);
     };
 
     void set_loop (bool do_loop);
