@@ -1219,7 +1219,7 @@ void PlayMode::update(float elapsed) {
 			player->position += dash_dir * dash_speed * elapsed;
 		} else {
 			constexpr float PlayerSpeed = 7.5f;
-			constexpr float RotationSpeed = .1f; // interp weight : between [0, 1]
+			constexpr float RotationSpeed = .3f; // interp weight : between [0, 1]
 			glm::vec2 move = glm::vec2(0.0f);
 			if (left.pressed && !right.pressed)
 				move.x = -1.0f;
