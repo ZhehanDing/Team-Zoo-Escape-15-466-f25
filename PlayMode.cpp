@@ -716,6 +716,32 @@ PlayMode::~PlayMode() {
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
+	//update 11/24 Alex Ding
+	// --- MAIN MENU INPUT ---
+    if (screen_state == ScreenState::MENU) {
+        if (evt.type == SDL_EVENT_KEY_DOWN) {
+            // Press ENTER to start the game
+            if (evt.key.key == SDLK_RETURN || evt.key.key == SDLK_SPACE) {
+                screen_state = ScreenState::PLAYING;
+
+                // (Optional) capture mouse when the game actually starts:
+                SDL_SetWindowRelativeMouseMode(Mode::window, true);
+
+                return true;
+            }
+
+            // Press ESC to quit the whole game
+            if (evt.key.key == SDLK_ESCAPE) {
+                SDL_Event quit;
+                quit.type = SDL_EVENT_QUIT;  // SDL3 style
+                SDL_PushEvent(&quit);
+                return true;
+            }
+        }
+
+        // while in menu, ignore other events
+        return false;
+    }
 
 	if (evt.type == SDL_EVENT_KEY_DOWN) {
 		if (evt.key.key == SDLK_ESCAPE) {
@@ -940,6 +966,10 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
+	if (screen_state == ScreenState::MENU) {
+			return;
+		}
+
 	if (game_over) {
 		// Optional: keep camera/UI effects, but block gameplay logic
 		// camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
@@ -1032,7 +1062,7 @@ void PlayMode::update(float elapsed) {
 		}
 		else
 		{
-			constexpr float PlayerSpeed = 30.0f;
+			constexpr float PlayerSpeed = 1.0f;
 			glm::vec2 move = glm::vec2(0.0f);
 			if (left.pressed && !right.pressed)
 				move.x = -1.0f;
@@ -1288,7 +1318,7 @@ void PlayMode::update(float elapsed) {
 
 	// update civilians
 	for (auto &civilian : civilians) {
-		civilian_update(civilian, elapsed);
+		civilian_update(civilian, elapsed, player);
 	}
 	resolve_collisions(civilians);
 	civilian_avoid_obstacles(civilians, {{player, 0.7f}, {enemy, 0.7f}});
@@ -1307,7 +1337,59 @@ void PlayMode::update(float elapsed) {
 
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
+	//11/24 update Alex Ding
+	// --- MAIN MENU SCREEN ---
+    if (screen_state == ScreenState::MENU) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, drawable_size.x, drawable_size.y);
 
+        glDisable(GL_DEPTH_TEST);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        float aspect = float(drawable_size.x) / float(drawable_size.y);
+
+        DrawLines lines(glm::mat4(
+            1.0f / aspect, 0.0f,        0.0f, 0.0f,
+            0.0f,         1.0f,         0.0f, 0.0f,
+            0.0f,         0.0f,         1.0f, 0.0f,
+            0.0f,         0.0f,         0.0f, 1.0f
+        ));
+
+        glm::u8vec4 white = glm::u8vec4(0xff, 0xff, 0xff, 0xff);
+
+        constexpr float H = 0.09f;
+
+        // Title
+        lines.draw_text(
+            "ZOO ESCAPE",
+            glm::vec3(-0.9f, 0.5f, 0.0f),
+            glm::vec3(H, 0.0f, 0.0f),
+            glm::vec3(0.0f, H, 0.0f),
+            white
+        );
+
+        // "Play" instruction
+        lines.draw_text(
+            "Press ENTER to Play",
+            glm::vec3(-0.9f, 0.1f, 0.0f),
+            glm::vec3(H * 0.6f, 0.0f, 0.0f),
+            glm::vec3(0.0f,  H * 0.6f, 0.0f),
+            white
+        );
+
+        // "Quit" instruction
+        lines.draw_text(
+            "Press ESC to Quit",
+            glm::vec3(-0.9f, -0.1f, 0.0f),
+            glm::vec3(H * 0.6f, 0.0f, 0.0f),
+            glm::vec3(0.0f,  H * 0.6f, 0.0f),
+            white
+        );
+
+        glEnable(GL_DEPTH_TEST);
+        return; // important: don't draw the 3D scene
+    }
 	//11/23 Update
 	// --- GAME OVER SCREEN: clear everything and only draw text ---
 	if (game_over) {

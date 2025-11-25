@@ -95,7 +95,7 @@ inline void civilian_set_state(Civilian &c, Civilian::State next) {
 	}
 }
 
-inline void civilian_update(Civilian &c, float elapsed) {
+inline void civilian_update(Civilian &c, float elapsed, Scene::Transform *player){
 	if (c.being_pulled) {
 		if (c.state != Civilian::WALK && c.state != Civilian::BETWEEN) {
 			civilian_set_state(c, Civilian::WALK);
@@ -163,6 +163,53 @@ inline void civilian_update(Civilian &c, float elapsed) {
 
 		return; // skip normal wandering logic while being pulled
 	}
+
+	//11/24 update Alex Ding
+	// === RUN AWAY FROM PLAYER if close & player is in front ===
+	if (player) {
+		glm::vec3 civ_pos3 = c.transform->position;
+		glm::vec3 player_pos3 = player->position;
+
+		glm::vec2 civ_pos(civ_pos3.x, civ_pos3.y);
+		glm::vec2 player_pos(player_pos3.x, player_pos3.y);
+
+		glm::vec2 to_player = player_pos - civ_pos;
+		float dist = glm::length(to_player);
+
+		if (dist < 20.0f) {  // distance condition
+			glm::mat4x3 frame = c.transform->make_world_from_local();
+			glm::vec3 fwd3 = -glm::vec3(frame[1]);  // civilian forward
+			glm::vec2 fwd(fwd3.x, fwd3.y);
+
+			glm::vec2 dir_to_player = glm::normalize(to_player);
+			float facing_dot = glm::dot(glm::normalize(fwd), dir_to_player);
+
+			if (facing_dot > 0.6f) {  // player in front cone
+				civilian_set_state(c, Civilian::RUN);
+
+				glm::vec2 away = glm::normalize(civ_pos - player_pos);
+				float runSpeed = c.speed * 10.0f; // faster than normal RUN
+
+				glm::vec2 step = away * runSpeed * elapsed;
+				c.transform->position.x += step.x;
+				c.transform->position.y += step.y;
+
+				// rotate to run-direction
+				float yaw = std::atan2(away.x, away.y);
+				glm::quat target_rot =
+					glm::angleAxis(yaw, glm::vec3(0, 0, 1)) * c.base_rotation;
+
+				c.transform->rotation = glm::slerp(
+					c.transform->rotation,
+					target_rot,
+					1.0f - std::exp(-8.0f * elapsed)
+				);
+
+				return; // IMPORTANT: skip normal AI
+			}
+		}
+	}
+
 
 	float prev_playback  = c.graph.playback;
 

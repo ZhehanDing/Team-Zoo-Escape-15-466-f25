@@ -93,7 +93,7 @@ struct PlayMode : Mode {
 	Camera *cam;
 	Scene::Camera *camera = nullptr;
 	bool focus_mode = false;		  // toggled with right mouse
-	float player_speed_factor = 1.0f; // 1.0 normally, 0.5 in focus mode
+	float player_speed_factor = 0.5f; // 1.0 normally, 0.5 in focus mode
 	float base_fovy = 1.0f;			  // store original camera fovy
 	float target_fovy = 1.0f;		  // what fovy we’re moving toward
 	float zoom_speed = 3.0f;
@@ -108,7 +108,7 @@ struct PlayMode : Mode {
 	//Excution mode
 	bool execution_mode = false;        // Trigger
 	bool enemy_alive = true;            // Detect is alive or not
-	float execution_range = 10.0f;       // excution area
+	float execution_range = 15.0f;       // excution area
 
 	// --- enemy patrol ---
 	enum EnemyState { ENEMY_STAND, ENEMY_WALK, ENEMY_BETWEEN };
@@ -141,6 +141,14 @@ struct PlayMode : Mode {
 	void trigger_game_success();
 
 	void enemy_to_dead();
+	//11/24 update
+	// --- high-level game screen state ---
+	enum class ScreenState {
+		MENU,      // main menu (start of game)
+		PLAYING,   // normal gameplay
+	};
+
+	ScreenState screen_state = ScreenState::MENU;
 
 	// Enemy collapse animation (after execution)
 	bool enemy_collapsing = false;
