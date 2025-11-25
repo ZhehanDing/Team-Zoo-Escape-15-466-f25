@@ -200,4 +200,8 @@ struct PlayMode : Mode {
 
 	ParticleGenerator blood_pg = ParticleGenerator(Sphere::sample);
 	ParticleGenerator dust_pg = ParticleGenerator(Sphere::sample);
+
+	// Sound
+	std::shared_ptr<Sound::PlayingSample> bg_loop;
+	glm::vec3 origin = glm::vec3(0.0f, 0.0f, 0.0f);
 };

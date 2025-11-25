@@ -54,6 +54,9 @@ Load< Sound::Sample > attraction_voice_3(LoadTagDefault, []() -> Sound::Sample c
 Load< Sound::Sample > attraction_voice_4(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("Sound4.wav"));
 });
+Load< Sound::Sample > bg_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("BackgroundMusic.wav"));
+});
 
 Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
@@ -392,6 +395,8 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (deer_fence_collider == nullptr) throw std::runtime_error("deer_fence_collider not found.");
 	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
 	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
+
+	bg_loop = Sound::loop(*bg_sample, 1.0f, 0.0f);
 
 	scene.drawables.remove_if([this](Scene::Drawable const &drawable) {
 		return drawable.transform == enemy;
