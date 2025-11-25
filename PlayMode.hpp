@@ -18,6 +18,9 @@
 #include <vector>
 #include "Civilian.hpp" 
 
+#include "Particles.hpp" 
+#include "Sampler.hpp" 
+
 struct PlayMode : Mode {
 	PlayMode();
 	virtual ~PlayMode();
@@ -194,4 +197,7 @@ struct PlayMode : Mode {
 	std::mt19937 rng{123456u};       // simple RNG; you can seed with time if you want
 	float attraction_cooldown_timer = 0.0f;
 	float attraction_cooldown = 0.6f; // avoid accidental audio spam
+
+	ParticleGenerator blood_pg = ParticleGenerator(Sphere::sample);
+	ParticleGenerator dust_pg = ParticleGenerator(Sphere::sample);
 };

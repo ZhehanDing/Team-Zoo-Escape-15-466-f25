@@ -32,7 +32,7 @@ void ParticleGenerator::continuous_update(float elapsed) {
             }
             
             // glm::vec3 sampled = sampler(rng);
-            p.Position = transform.make_world_from_local()[3]; // * glm::vec4(sampled, 1.f);
+            p.Position = transform.make_world_from_local()[3] + spawn_offset; // * glm::vec4(sampled, 1.f);
             if (speed.x == speed.y)
                 s.velocity = speed.x * glm::normalize(sampler(rng));
             else {
@@ -57,6 +57,8 @@ void ParticleGenerator::continuous_update(float elapsed) {
 
     if (!alive.empty())
         particles.set(alive, GL_DYNAMIC_DRAW);
+    else
+        particles.count = 0;
 }
 
 void ParticleGenerator::burst_at(glm::vec3 position, size_t particle_count) {

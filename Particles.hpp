@@ -60,10 +60,8 @@ struct ParticleState {
 struct ParticleGenerator {
     Scene::Transform transform;
 
-    enum Type { // have yet to decide data setup for LOCAL computation, likely will have transform on ParticleGenerator as "center"
-        LOCAL, GLOBAL
-    } type = GLOBAL;
-
+    glm::vec3 spawn_offset = glm::vec3(0.f);
+    
     void set_lifetime_range(float min, float max) { 
         lifetime.x = min; 
         lifetime.y = max;

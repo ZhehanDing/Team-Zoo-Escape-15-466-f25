@@ -750,6 +750,23 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		glBindVertexArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}*/
+
+	blood_pg.set_texture(Texture::load_from_png(data_path("textures/blood.png")));
+	blood_pg.set_angle_range(0.f, glm::radians(360.f));
+	blood_pg.set_lifetime_range(.15f, .35f);
+	blood_pg.set_size_range(.1f, .25f);
+	blood_pg.set_speed_range(5.f, 8.f);
+	blood_pg.set_spawn_rate(0.f);
+
+	dust_pg.set_texture(Texture::load_from_png(data_path("textures/dust.png")));
+	dust_pg.set_angle_range(0.f, glm::radians(360.f));
+	dust_pg.set_lifetime_range(1.f, 1.5f);
+	dust_pg.set_size_range(.35f, .75f);
+	dust_pg.set_speed_range(.75f, 1.25f);
+	dust_pg.set_spawn_rate(0.f);
+	dust_pg.spawn_offset = glm::vec3(0.f, 0.f, .15f);
+
+	dust_pg.transform.parent = player;
 }
 
 void PlayMode::trigger_game_over() {
@@ -994,6 +1011,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 
 					++kill_count;
 
+					blood_pg.burst_at(execution_target->position + glm::vec3(0.f, .5f, 0.f), 20);
+
 					// hide the civilian visually
 					execution_target->scale = glm::vec3(0.0f);
 					execution_target->position.z = -100.0f;
@@ -1056,7 +1075,7 @@ void PlayMode::update(float elapsed) {
 		// camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 		return;
 	}
-
+	
 	// --- Dash timers ---
 	if (dash_cooldown_timer > 0.0f) {
 		dash_cooldown_timer = std::max(0.0f, dash_cooldown_timer - elapsed);
@@ -1214,9 +1233,11 @@ void PlayMode::update(float elapsed) {
 
 	// --- Player movement (WASD, relative to camera) ---
 	{
+		dust_pg.set_spawn_rate(0.f);
 		if (dashing)
 		{
 			player->position += dash_dir * dash_speed * elapsed;
+			dust_pg.set_spawn_rate(.1f);
 		} else {
 			constexpr float PlayerSpeed = 7.5f;
 			constexpr float RotationSpeed = .3f; // interp weight : between [0, 1]
@@ -1232,6 +1253,8 @@ void PlayMode::update(float elapsed) {
 
 			if (move != glm::vec2(0.0f)) {
 				move = glm::normalize(move);
+
+				dust_pg.set_spawn_rate(.1f);
 
 				// compute new player rotation relative to camera
 				glm::vec3 forward_xy = glm::vec3 (
@@ -1527,6 +1550,9 @@ void PlayMode::update(float elapsed) {
 		Sound::listener.set_position_right(frame_at, frame_right, 1.0f / 60.0f);
 	}
 
+	blood_pg.continuous_update(elapsed);
+	dust_pg.continuous_update(elapsed);
+
 	// --- reset one-frame key counts ---
 	left.downs = right.downs = up.downs = down.downs = 0;
 }
@@ -1818,12 +1844,16 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 	glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
-	
+
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	
+
+	// draw particles
+	blood_pg.draw();
+	dust_pg.draw();
+
 	for (Scene::Drawable *drawable : enemy_drawables) {
 		if (!drawable) continue;
 		
@@ -2195,5 +2225,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		glEnable(GL_CULL_FACE);
 		glEnable(GL_DEPTH_TEST);
 	}*/
+
 	GL_ERRORS();
 }
