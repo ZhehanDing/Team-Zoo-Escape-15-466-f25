@@ -2215,8 +2215,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		));
 
 		// bar geometry (screen space): centered, near bottom
-		const float bar_w = 1.6f;     // total width
-		const float bar_h = 0.08f;    // height
+		const float bar_w = 1.3f;     // total width
+		const float bar_h = 0.07f;    // height
 		const float y     = -0.90f;   // vertical position
 		const float x0    = -0.5f * bar_w;
 		const float x1    =  0.5f * bar_w;
@@ -2234,23 +2234,28 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		glm::u8vec4 back(0x55, 0x55, 0x55, 0xff);
 		lines.draw(glm::vec3(x0, (y0+y1)*0.5f, 0.0f), glm::vec3(x1, (y0+y1)*0.5f, 0.0f), back);
 
-		// FILLED BLACK RECTANGLE that grows with stalk_charge:
 		const float fill_x = x0 + (x1 - x0) * stalk_charge;
-		glm::u8vec4 black(0x00, 0x00, 0x00, 0xff);
-
+		glm::u8vec4 stalk_fill_color(30, 74, 14, 150);
+		
+		// label
+		const float H = 0.06f;
+		std::string stalk_text;
+		if (stalk_charge >= 1) {
+			stalk_text = "Stalk complete. Left click to attack human!";
+			stalk_fill_color = glm::u8vec4(0, 20, 0, 200);
+		} else {
+			stalk_text = "STALK " + std::to_string(int(stalk_charge * 100.0f)) + "%";
+		}
 		// scan-fill using horizontal lines
-		const int stripes = 48; // more = more solid-looking fill
+		const int stripes = 90; // more = more solid-looking fill
 		for (int i = 0; i < stripes; ++i) {
 			float t0 = float(i) / stripes;
 			float y_line = y0 + t0 * bar_h;
 			lines.draw(glm::vec3(x0,    y_line, 0.0f),
 					glm::vec3(fill_x, y_line, 0.0f),
-					black);
+					stalk_fill_color);
 		}
-
-		// label
-		const float H = 0.06f;
-		lines.draw_text("STALK",
+		lines.draw_text(stalk_text,
 			glm::vec3(x0, y1 + 0.02f, 0.0f),
 			glm::vec3(H, 0.0f, 0.0f),
 			glm::vec3(0.0f, H, 0.0f),
