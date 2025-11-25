@@ -21,6 +21,7 @@ scenes/show-scene*
 *.blend[0-9]
 maek-cache.json
 scenes/zoo_nolink.blend
+scenes/zoo_nolink_reduced.blend
 scenes/deer.blend
 
 dist/zoo_nolink.pnct

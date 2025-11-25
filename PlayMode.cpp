@@ -63,6 +63,9 @@ Load< Sound::Sample > gate_open(LoadTagDefault, []() -> Sound::Sample const * {
 Load< Sound::Sample > footstep_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("FootStep.wav"));
 });
+Load< Sound::Sample > stalking_completed(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("StalkingCompleted.wav"));
+});
 
 Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
 	std::vector< std::string > filenames = {
@@ -1461,6 +1464,7 @@ void PlayMode::update(float elapsed) {
 		if (stalk_charge > 1.0f) {
 			stalk_charge = 1.0f;
             execution_mode = true;
+			Sound::play(*stalking_completed, 1.0f, 1.0f);
 		}
 
 		// force pitch and player model to look towards stalk direction
