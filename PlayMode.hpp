@@ -94,7 +94,7 @@ struct PlayMode : Mode {
 	bool is_deer_human = false;
 
 	// Gate
-	std::unique_ptr< RiggedMesh > gate_rig;
+	void trigger_gate_open();
 	bool gate_can_open = false;
 	bool gate_anim_playing = false;
 	float gate_rot_t = 0.0f;

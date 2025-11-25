@@ -84,6 +84,9 @@ Load< Sound::Sample > watched_sample(LoadTagDefault, []() -> Sound::Sample const
 Load< Sound::Sample > dash_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("Dash.wav"));
 });
+Load< Sound::Sample > over_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Over.wav"));
+});
 
 Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
 	std::vector< std::string > filenames = {
@@ -726,18 +729,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		}
 	}
 
-	// Gate
-	if (gate_rig) {
-		scene.drawables.emplace_back(gate);
-		Scene::Drawable &gate_drawable = scene.drawables.back();
-		gate_drawable.pipeline = skinning_program_pipeline;
-		gate_drawable.pipeline.vao =
-			gate_rig->make_vao_for_program(skinning_program->program);
-		gate_drawable.pipeline.type = gate_rig->mesh.type;
-		gate_drawable.pipeline.start = gate_rig->mesh.start;
-		gate_drawable.pipeline.count = gate_rig->mesh.count;
-	}
-
 	// get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
 	camera = &scene.cameras.front();
@@ -840,7 +831,8 @@ void PlayMode::trigger_game_over() {
 	if (game_over) return; // idempotent
 	
 	game_over = true;
-	Sound::stop_all_samples();
+	Sound::play(*over_sample, 1.0f, 0.0f);
+	// Sound::stop_all_samples();
 }
 
 void PlayMode::trigger_game_success() {
@@ -917,6 +909,32 @@ void PlayMode::stop_stalking_loop()
 		stalking_loop.reset();
 	}
 }
+
+void PlayMode::trigger_gate_open() {
+	if (gate_can_open) return; // already opened or opening
+
+	Sound::play_3D(*gate_open_sample, 2.0f, gate->position, 60.0f);
+
+	gate_anim_playing = true;
+	gate_can_open = true;
+
+	gate_rot_t = 0.0f;
+	glm::vec3 z_axis(0.0f, 0.0f, 1.0f);
+
+	gate_L_start = gate_L->rotation;
+	gate_R_start = gate_R->rotation;
+
+	float deg = 135.0f;
+	gate_L_end = gate_L_start * glm::angleAxis(glm::radians(deg), z_axis);
+	gate_R_end = gate_R_start * glm::angleAxis(glm::radians(-deg), z_axis);
+
+	float deg_phase2_L = -7.0f;
+	float deg_phase2_R =  7.0f;
+
+	gate_L_final = gate_L_end * glm::angleAxis(glm::radians(deg_phase2_L), z_axis);
+	gate_R_final = gate_R_end * glm::angleAxis(glm::radians(deg_phase2_R), z_axis);
+}
+
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
 	//update 11/24 Alex Ding
@@ -1051,31 +1069,6 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			}
 			return true;
 		}
-		else if (evt.key.key == SDLK_P && !gate_can_open)
-		{
-			Sound::play_3D(*gate_open_sample, 1.2f, gate->position, 60.0f);
-
-    		gate_anim_playing = true; 
-			gate_can_open = true; // TODO: need a condition for this to be true
-
-			gate_rot_t = 0.0f;
-			glm::vec3 z_axis(0.0f, 0.0f, 1.0f);
-
-			gate_L_start = gate_L->rotation;
-			gate_R_start = gate_R->rotation;
-
-			float deg = 135.0f;
-			gate_L_end = gate_L_start * glm::angleAxis(glm::radians(deg), z_axis);
-			gate_R_end = gate_R_start * glm::angleAxis(glm::radians(-deg), z_axis);
-
-			float deg_phase2_L = -7.0f;
-			float deg_phase2_R =  7.0f;
-
-			gate_L_final = gate_L_end * glm::angleAxis(glm::radians(deg_phase2_L), z_axis);
-			gate_R_final = gate_R_end * glm::angleAxis(glm::radians(deg_phase2_R), z_axis);
-			
-			return true;
-		}
 		// TODO: Delete later! For testing purposes
 		else if (evt.key.key == SDLK_X)
 		{
@@ -1156,6 +1149,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 					if (!pass_hint_active && kill_count >= 5) {
 						pass_hint_active = true;
 						is_deer_human = true;
+						trigger_gate_open();
 					}
 
 
