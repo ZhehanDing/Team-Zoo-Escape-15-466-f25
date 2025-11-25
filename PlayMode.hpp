@@ -204,9 +204,12 @@ struct PlayMode : Mode {
 	// Sound
 	std::shared_ptr<Sound::PlayingSample> bg_loop;
 	std::shared_ptr<Sound::PlayingSample> footstep_loop = nullptr;
-	void start_footstep();
-	void stop_footstep();
-	
+	std::shared_ptr<Sound::PlayingSample> stalking_loop = nullptr;
+	void start_footstep_loop();
+	void stop_footstep_loop();
+	void start_stalking_loop();
+	void stop_stalking_loop();
+
 	//11/24 Update Alex Ding
 	// UI hint for dash unlock
 	bool dash_hint_active = false;

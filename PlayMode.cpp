@@ -57,14 +57,17 @@ Load< Sound::Sample > attraction_voice_4(LoadTagDefault, []() -> Sound::Sample c
 Load< Sound::Sample > bg_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("BackgroundMusic.wav"));
 });
-Load< Sound::Sample > gate_open(LoadTagDefault, []() -> Sound::Sample const * {
+Load< Sound::Sample > gate_open_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("GateOpen.wav"));
 });
 Load< Sound::Sample > footstep_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("FootStep.wav"));
 });
-Load< Sound::Sample > stalking_completed(LoadTagDefault, []() -> Sound::Sample const * {
+Load< Sound::Sample > stalking_completed_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("StalkingCompleted.wav"));
+});
+Load< Sound::Sample > stalking_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Stalking.wav"));
 });
 
 Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std::vector< Sound::Sample > const * {
@@ -862,7 +865,7 @@ PlayMode::~PlayMode() {
 
 }
 
-void PlayMode::start_footstep()
+void PlayMode::start_footstep_loop()
 {
 	if (!footstep_loop)
 	{
@@ -870,7 +873,7 @@ void PlayMode::start_footstep()
 	}
 }
 
-void PlayMode::stop_footstep()
+void PlayMode::stop_footstep_loop()
 {
 	if (footstep_loop &&
 		!left.pressed && !right.pressed &&
@@ -878,6 +881,25 @@ void PlayMode::stop_footstep()
 	{
 		footstep_loop->stop();
 		footstep_loop.reset();
+	}
+}
+
+void PlayMode::start_stalking_loop()
+{
+	if (!stalking_loop && stalk_charge < 1.0f)
+	{
+		stalking_loop = Sound::loop(*stalking_sample, 1.0f, 0.0f);
+	}
+}
+
+void PlayMode::stop_stalking_loop()
+{
+	if (stalking_loop &&
+		!left.pressed && !right.pressed &&
+		!up.pressed && !down.pressed)
+	{
+		stalking_loop->stop();
+		stalking_loop.reset();
 	}
 }
 
@@ -924,22 +946,22 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		} else if (evt.key.key == SDLK_A) {
 			left.downs += 1;
 			left.pressed = true;
-			start_footstep();
+			start_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_D) {
 			right.downs += 1;
 			right.pressed = true;
-			start_footstep();
+			start_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_W) {
 			up.downs += 1;
 			up.pressed = true;
-			start_footstep();
+			start_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_S) {
 			down.downs += 1;
 			down.pressed = true;
-			start_footstep();
+			start_footstep_loop();
 			return true;
 		}else if (evt.key.key == SDLK_SPACE) {
 			// Start dash if unlocked, not already dashing, and off cooldown
@@ -1014,8 +1036,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		}
 		else if (evt.key.key == SDLK_P && !gate_can_open)
 		{
-			// Sound::play_3D(*gate_open, 1.0f, 1.0f);
-			Sound::play_3D(*gate_open, 1.0f, gate->position, 30.0f);
+			// Sound::play_3D(*gate_open_sample, 1.0f, 1.0f);
+			Sound::play_3D(*gate_open_sample, 1.2f, gate->position, 30.0f);
 
     		gate_anim_playing = true; 
 			gate_can_open = true; // TODO: need a condition for this to be true
@@ -1048,19 +1070,19 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
 		if (evt.key.key == SDLK_A) {
 			left.pressed = false;
-			stop_footstep();
+			stop_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_D) {
 			right.pressed = false;
-			stop_footstep();
+			stop_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_W) {
 			up.pressed = false;
-			stop_footstep();
+			stop_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_S) {
 			down.pressed = false;
-			stop_footstep();
+			stop_footstep_loop();
 			return true;
 		}
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
@@ -1074,6 +1096,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			stalking = true;
 			player_speed_factor = 0.2f;		// slow to 50%
 			target_fovy = base_fovy * 0.7f; // zoom in a bit
+			start_stalking_loop();
 			return true;
 		} else if (evt.button.button == SDL_BUTTON_LEFT) {
 			if (execution_mode && execution_target) {
@@ -1140,6 +1163,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			stalking = false;
 			player_speed_factor = 1.0f;
 			target_fovy = base_fovy * 2.1f; // restore zoom
+			stop_stalking_loop();
 			return true;
 		}
 	} else if (evt.type == SDL_EVENT_MOUSE_MOTION) {
@@ -1460,11 +1484,18 @@ void PlayMode::update(float elapsed) {
 
 	// --- Stalk bar charge/decay (depends on enemy on-screen visibility) ---
 	if (stalking && enemy_on_screen && enemy_visible) {
+		float prev_charge = stalk_charge;
 		stalk_charge += stalk_charge_rate * elapsed;
-		if (stalk_charge > 1.0f) {
+
+		if (prev_charge < 1.0f && stalk_charge >= 1.0f)
+		{
 			stalk_charge = 1.0f;
-            execution_mode = true;
-			Sound::play(*stalking_completed, 1.0f, 1.0f);
+			execution_mode = true;
+			Sound::play(*stalking_completed_sample, 0.8f, 1.0f);
+		}
+		else if (stalk_charge > 1.0f)
+		{
+			stalk_charge = 1.0f;
 		}
 
 		// force pitch and player model to look towards stalk direction
