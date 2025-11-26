@@ -3,7 +3,9 @@
 #include "Scene.hpp"
 #include <iostream>
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 
 struct Camera {
     Scene::Camera *main = nullptr;
@@ -57,8 +59,14 @@ struct Camera {
             else if (pitch < pitch_range.x) pitch = pitch_range.x;
 
             if (!main->transform->parent || !rotate_anchor) {
-                glm::quat to_world_rot = glm::quat_cast(glm::mat4(main->transform->parent->make_world_from_local()));
-                main->transform->rotation = glm::inverse(to_world_rot) * glm::quat( glm::vec3 (pitch, roll, yaw) );
+                glm::mat4 to_world = glm::mat4(main->transform->parent->make_world_from_local());
+                glm::vec3 scale, translation, skew;
+                glm::quat orientation;
+                glm::vec4 perspective;
+                glm::decompose(to_world, scale, orientation, translation, skew, perspective);
+                main->transform->rotation = glm::inverse(
+                    glm::quat_cast(to_world * glm::inverse(glm::scale(scale)))) * 
+                    glm::quat( glm::vec3 (pitch, roll, yaw) );
             }
             else {
                 main->transform->rotation = glm::quat(glm::vec3 (pitch, roll, 0.f));
