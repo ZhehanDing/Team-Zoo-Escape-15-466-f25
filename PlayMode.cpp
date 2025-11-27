@@ -2023,6 +2023,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	blood_pg.draw();
 	dust_pg.draw();
 
+	/*
 	for (Scene::Drawable *drawable : enemy_drawables) {
 		if (!drawable) continue;
 		
@@ -2136,6 +2137,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	
 	glUseProgram(0);
 	glBindVertexArray(0);
+	*/
 
 	//--- stalking mechanics ---
 	if (focus_mode) {
@@ -2158,7 +2160,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	// Draw the scene with your normal pipelines; this will fill depth,
 	// but leave the deferred-lit color untouched:
-	scene.draw(*camera);
+	// scene.draw(*camera);
 
 	// Re-enable color writes for later overlays:
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
