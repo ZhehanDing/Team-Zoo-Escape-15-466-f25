@@ -21,6 +21,8 @@
 #include "Particles.hpp" 
 #include "Sampler.hpp" 
 
+#include "GeometryInstance.hpp"
+
 struct PlayMode : Mode {
 	PlayMode();
 	virtual ~PlayMode();
@@ -41,6 +43,9 @@ struct PlayMode : Mode {
 
 	// local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
+
+	// static geometry instancers
+	std::map< std::string, Instancer > static_geometry;
 
 	std::vector<Civilian> civilians;
 	std::vector< Scene::Drawable * > civilian_drawables;

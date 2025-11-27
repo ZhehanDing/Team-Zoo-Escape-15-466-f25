@@ -3,6 +3,7 @@
 #include <cmath>
 // #include "LitColorTextureProgram.hpp"
 #include "BasicMaterialDeferredProgram.hpp"
+#include "BasicMaterialDeferredInstancingProgram.hpp"
 #include "LightMeshes.hpp"
 #include "CopyToScreenProgram.hpp"
 #include "ParticleProgram.hpp"
@@ -32,6 +33,7 @@
 #include <map>
 #include <functional>
 #include <memory>
+#include <set>
 
 GLuint zoo_for_basic_material_deferred_object = 0;
 GLuint light_for_basic_material_deferred_light = 0;
@@ -105,55 +107,100 @@ Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std
     return ret;
 });
 
+std::set< std::string > dynamic_names = { "Gate", "Gate_L", "Gate_R", "Sky", "Tyriese_Miller_C_Deer_Idle:body", "Tyriese_Miller_C_Deer_Idle:antler" };
+std::map< std::string, Instancer > instancers;
 Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
 	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
 
+	instancers.clear();
+
 	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		Mesh const &mesh = zoo_meshes->lookup(mesh_name);
+		if (dynamic_names.find(transform->name) != dynamic_names.end()) {
+			scene.drawables.emplace_back(transform);
+			Scene::Drawable &drawable = scene.drawables.back();
 
-		scene.drawables.emplace_back(transform);
-		Scene::Drawable &drawable = scene.drawables.back();
+			// drawable.pipeline = lit_color_texture_program_pipeline;
+			drawable.pipeline = basic_material_deferred_object_program_pipeline;
 
-		// drawable.pipeline = lit_color_texture_program_pipeline;
-		drawable.pipeline = basic_material_deferred_object_program_pipeline;
+			drawable.pipeline.vao = zoo_for_basic_material_deferred_object;
+			drawable.pipeline.type = mesh.type;
+			drawable.pipeline.start = mesh.start;
+			drawable.pipeline.count = mesh.count;
 
-		drawable.pipeline.vao = zoo_for_basic_material_deferred_object;
-		drawable.pipeline.type = mesh.type;
-		drawable.pipeline.start = mesh.start;
-		drawable.pipeline.count = mesh.count;
+			float roughness = 1.0f;
+			// if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
+			// 	roughness = (transform->position.y + 10.0f) / 18.0f;
+			// }
 
-		float roughness = 1.0f;
-		// if (transform->name.substr(0, 9) == "Icosphere") { //TODO: change name
-		// 	roughness = (transform->position.y + 10.0f) / 18.0f;
-		// }
-
-		// printf("-- Transform name: %s\n", transform->name.c_str());
-		for (size_t i = 0; i < named_textures.size(); ++i)
-		{
-			// printf("Checking prefix: %s\n", named_textures[i].prefix.c_str());
-			if (transform->name.rfind(named_textures[i].prefix, 0) == 0)
+			// printf("-- Transform name: %s\n", transform->name.c_str());
+			for (size_t i = 0; i < named_textures.size(); ++i)
 			{
-				if (i < textures->size())
+				// printf("Checking prefix: %s\n", named_textures[i].prefix.c_str());
+				if (transform->name.rfind(named_textures[i].prefix, 0) == 0)
 				{
-					// printf("Assigning texture %s to object %s\n", named_textures[i].filename.c_str(), transform->name.c_str());
-					drawable.pipeline.textures[0].texture = (*textures)[i];
-					drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+					if (i < textures->size())
+					{
+						// printf("Assigning texture %s to object %s\n", named_textures[i].filename.c_str(), transform->name.c_str());
+						drawable.pipeline.textures[0].texture = (*textures)[i];
+						drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
+					}
+					break;
 				}
-				break;
 			}
+
+			bool is_sky = (transform->name == "Sky");
+			drawable.pipeline.set_uniforms = [roughness, is_sky]()
+			{
+				glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
+				glUniform1i(basic_material_deferred_object_program->SKY_MODE_int,
+							is_sky ? 1 : 0);
+			};
 		}
+		else {
+			if (instancers.find(mesh_name) == instancers.end()) {
+				instancers.insert({ mesh_name, Instancer() });
+				Instancer &instancer = instancers[mesh_name];
+				instancer.vbo_vert = zoo_meshes->buffer;
+				instancer.pipeline = basic_material_deferred_object_instancing_program_pipeline;
+				// vao is created in PlayMode constructor, once all instances are accounted for
+				instancer.pipeline.type = mesh.type;
+				instancer.pipeline.start = mesh.start;
+				instancer.pipeline.count = mesh.count;
 
-		bool is_sky = (transform->name == "Sky");
-		drawable.pipeline.set_uniforms = [roughness, is_sky]()
-		{
-			glUniform1f(basic_material_deferred_object_program->ROUGHNESS_float, roughness);
-			glUniform1i(basic_material_deferred_object_program->SKY_MODE_int,
-						is_sky ? 1 : 0);
-		};
-		});
+				for (size_t i = 0; i < named_textures.size(); ++i)
+				{
+					// printf("Checking prefix: %s\n", named_textures[i].prefix.c_str());
+					if (transform->name.rfind(named_textures[i].prefix, 0) == 0)
+					{
+						if (i < textures->size())
+						{
+							// printf("Assigning texture %s to object %s\n", named_textures[i].filename.c_str(), transform->name.c_str());
+							instancer.pipeline.textures[0].texture = (*textures)[i];
+							instancer.pipeline.textures[0].target = GL_TEXTURE_2D;
+						}
+						break;
+					}
+				}
 
-		return ret; });
+				float roughness = 1.0f;
+				instancer.pipeline.set_uniforms = [roughness]() {
+					glUniform1f(basic_material_deferred_object_instancing_program->ROUGHNESS_float, roughness);
+				};
+			}
+			
+			instancers[mesh_name].world_mats.emplace_back(transform->make_world_from_local());
+		}
+	});
+
+	for (auto &p : instancers) {
+		p.second.make_vao_for_program(basic_material_deferred_object_instancing_program->program);
+	}
+
+	return ret; 
+});
+		
 
 // Helper: maintain a framebuffer to hold rendered geometry
 struct FB {
@@ -405,6 +452,8 @@ void make_civilian(
 }
 
 PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
+	static_geometry = std::move(instancers);
+
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
@@ -1861,6 +1910,11 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	//draw objects to geometry framebuffers:
 	scene.draw(world_to_clip); // render scene into G-buffers using world->clip matrix
 
+	// draw static geometry
+	for (auto &p : static_geometry) {
+		p.second.draw(world_to_clip, glm::mat4x3(1.0f));
+	}
+
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind framebuffer (return to default framebuffer)
 
 	GL_ERRORS(); // check for GL errors (helper macro)
@@ -2025,6 +2079,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	blood_pg.draw();
 	dust_pg.draw();
 
+	/*
 	for (Scene::Drawable *drawable : enemy_drawables) {
 		if (!drawable) continue;
 		
@@ -2138,6 +2193,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	
 	glUseProgram(0);
 	glBindVertexArray(0);
+	*/
 
 	//--- stalking mechanics ---
 	if (focus_mode) {
@@ -2160,7 +2216,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	// Draw the scene with your normal pipelines; this will fill depth,
 	// but leave the deferred-lit color untouched:
-	scene.draw(*camera);
+	// scene.draw(*camera);
 
 	// Re-enable color writes for later overlays:
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);

@@ -158,6 +158,7 @@ const game_names = [
 	maek.CPP('Collision.cpp'),
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('main.cpp'),
+	maek.CPP('GeometryInstance.cpp'),
 	maek.CPP('SkinningProgram.cpp'),
 	maek.CPP('SkinningDeferredProgram.cpp'),
 	maek.CPP('LitColorTextureProgram.cpp'),
@@ -168,6 +169,7 @@ const game_names = [
 	maek.CPP('load_opus.cpp'),
 	maek.CPP('LightMeshes.cpp'),
 	maek.CPP('BasicMaterialDeferredProgram.cpp'),
+	maek.CPP('BasicMaterialDeferredInstancingProgram.cpp'),
 	maek.CPP('CopyToScreenProgram.cpp'),
 ];
 
