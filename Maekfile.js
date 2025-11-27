@@ -170,6 +170,7 @@ const game_names = [
 	maek.CPP('LightMeshes.cpp'),
 	maek.CPP('BasicMaterialDeferredProgram.cpp'),
 	maek.CPP('BasicMaterialDeferredInstancingProgram.cpp'),
+	maek.CPP('LightStencilProgram.cpp'),
 	maek.CPP('CopyToScreenProgram.cpp'),
 ];
 

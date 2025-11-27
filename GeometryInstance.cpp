@@ -4,13 +4,12 @@
 #include "gl_errors.hpp"
 #include <set>
 
-void Instancer::make_vao_for_program(GLuint program) {
+void Instancer::make_vao() {
     assert(vbo_vert != 0 && "Invalid vertex buffer!");
     if (vbo_world == 0) {
         glGenBuffers(1, &vbo_world);
     }
 
-    pipeline.program = program;
     glBindBuffer(GL_ARRAY_BUFFER, vbo_world);
     glBufferData(GL_ARRAY_BUFFER, world_mats.size() * sizeof(glm::mat4), 
         world_mats.data(), GL_DYNAMIC_DRAW);

@@ -20,7 +20,6 @@ struct Instancer {
     };
     static_assert(sizeof(Vertex) == 36);
 
-    void make_vao_for_program(GLuint program);
-
+    void make_vao();
     void draw(glm::mat4 world_to_clip, glm::mat4x3 world_to_light);
 };

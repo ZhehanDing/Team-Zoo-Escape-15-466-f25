@@ -4,6 +4,7 @@
 // #include "LitColorTextureProgram.hpp"
 #include "BasicMaterialDeferredProgram.hpp"
 #include "BasicMaterialDeferredInstancingProgram.hpp"
+#include "LightStencilProgram.hpp"
 #include "LightMeshes.hpp"
 #include "CopyToScreenProgram.hpp"
 #include "ParticleProgram.hpp"
@@ -37,6 +38,7 @@
 
 GLuint zoo_for_basic_material_deferred_object = 0;
 GLuint light_for_basic_material_deferred_light = 0;
+GLuint light_for_stencil_deferred_light = 0;
 // GLuint zoo_meshes_for_lit_color_texture_program = 0;
 
 Load< MeshBuffer > zoo_meshes(LoadTagDefault, []() -> MeshBuffer const * {
@@ -111,6 +113,7 @@ std::set< std::string > dynamic_names = { "Gate", "Gate_L", "Gate_R", "Sky", "Ty
 std::map< std::string, Instancer > instancers;
 Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
+	light_for_stencil_deferred_light = light_meshes->make_vao_for_program(light_stencil_program->program);
 	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
 
 	instancers.clear();
@@ -195,8 +198,10 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	});
 
 	for (auto &p : instancers) {
-		p.second.make_vao_for_program(basic_material_deferred_object_instancing_program->program);
+		p.second.make_vao();
 	}
+
+	std::cout << instancers.size() << std::endl;
 
 	return ret; 
 });
@@ -452,7 +457,7 @@ void make_civilian(
 }
 
 PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
-	static_geometry = std::move(instancers);
+	static_geometry = instancers;
 
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
@@ -1925,93 +1930,141 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set clear color for lights pass (transparent black)
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear both color and depth on lights framebuffer
-	glDisable(GL_DEPTH_TEST); // disable standard depth testing for light accumulation
+	// glDisable(GL_DEPTH_TEST); // disable standard depth testing for light accumulation
 	glDepthFunc(GL_GREATER); // use reversed-depth test: pass if fragment depth > stored depth (used with front-face culling)
 
-	glCullFace(GL_FRONT); // cull front faces so we render back faces of light volumes
-	glEnable(GL_CULL_FACE); // enable face culling
+	// glCullFace(GL_FRONT); // cull front faces so we render back faces of light volumes
+	// glEnable(GL_CULL_FACE); // enable face culling
 
-	glEnable(GL_BLEND); // enable blending to accumulate light contributions
 	glBlendEquation(GL_FUNC_ADD); // blending operation: add src and dst
 	glBlendFunc(GL_ONE, GL_ONE); // additive blending: src*1 + dst*1
 	glDepthMask(GL_FALSE); // disable depth writes while accumulating lighting (keep depth buffer from changing)
 
-	//draw geometry for each light:
-	auto &prog = basic_material_deferred_light_program; // reference to the deferred-light shader wrapper
-	glUseProgram(prog->program); // bind the deferred-light shader program
-
-	glBindVertexArray(light_for_basic_material_deferred_light); // bind VAO containing the light-volume geometry
-
-	glActiveTexture(GL_TEXTURE0); // select texture unit 0
-	glBindTexture(GL_TEXTURE_2D, fb.position_tex); // bind world-space position G-buffer to unit 0
-	glActiveTexture(GL_TEXTURE1); // select texture unit 1
-	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex); // bind normal+roughness G-buffer to unit 1
-	glActiveTexture(GL_TEXTURE2); // select texture unit 2
-	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex); // bind albedo (color) G-buffer to unit 2
-
 	for (auto const &light : scene.lights) { // iterate over all lights in the scene
-		glm::mat4 light_to_world = light.transform->make_world_from_local(); // compute light's model-to-world transform
+		glEnable(GL_STENCIL_TEST);
+		glClearStencil(0);
+		glStencilMask(255);
+		glClear(GL_STENCIL_BUFFER_BIT);
+		{	// --- stencil pass -- 
+			// https://community.khronos.org/t/fast-stencil-light-volumes-for-deferred-shading/68405
+			// https://www.ogldev.org/www/tutorial37/tutorial37.html
+			glDisable(GL_BLEND);
+			glDisable(GL_CULL_FACE);
+			glEnable(GL_DEPTH_TEST);
+			glDepthFunc(GL_GREATER);
+			glStencilFunc(GL_ALWAYS, 0, 0);
+			glStencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
+			glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
 
-		Mesh const *mesh = nullptr; // pointer to chosen light-volume mesh for this light
+			glUseProgram(light_stencil_program->program);
+			glBindVertexArray(light_for_stencil_deferred_light);
 
-		glUniform3fv(prog->EYE_vec3, 1, glm::value_ptr(eye)); // upload camera/eye position (in light-space)
-		glUniform3fv(prog->LIGHT_LOCATION_vec3, 1, glm::value_ptr(glm::vec3(light_to_world[3]))); // upload light position
-		glUniform3fv(prog->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(-light_to_world[2]))); // upload light direction (negated forward)
-		glUniform3fv(prog->LIGHT_ENERGY_vec3, 1, glm::value_ptr(light.energy)); // upload light energy/color
-		if (light.type == Scene::Light::Point) {
-			glUniform1i(prog->LIGHT_TYPE_int, 0); // tell shader this is a point light
-			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // cutoff not used for point here (set to 1)
-			mesh = &light_meshes->cube; // use cube mesh as bounding volume for point light
-			//when is energy / dis^2 < 1/256.0f?
-			float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // compute influence radius from energy
-			light_to_world = light_to_world * glm::mat4( // scale the light-volume by R
-				R, 0.0f, 0.0f, 0.0f,
-				0.0f, R, 0.0f, 0.0f,
-				0.0f, 0.0f, R, 0.0f,
-				0.0f, 0.0f, 0.0f, 1.0f
-			);
-		} else if (light.type == Scene::Light::Hemisphere) {
-			glUniform1i(prog->LIGHT_TYPE_int, 1); // hemisphere light type
-			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
-			mesh = &light_meshes->everything; // full-screen geometry
-			float R = 1.0f; // radius unused/1
-			light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
-				R, 0.0f, 0.0f, 0.0f,
-				0.0f, R, 0.0f, 0.0f,
-				0.0f, 0.0f, R, 0.0f,
-				0.0f, 0.0f, 0.0f, 1.0f
-			);
-		} else if (light.type == Scene::Light::Spot) {
-			glUniform1i(prog->LIGHT_TYPE_int, 2); // spot light type
-			glUniform1f(prog->LIGHT_CUTOFF_float, std::cos(0.5f * light.spot_fov)); // upload spot cutoff cosine
-			mesh = &light_meshes->cone; // use cone mesh for spot volume
-			float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // estimate radius from energy
-			//HACK: hard-limit to 5 units:
-			R = 5.0f; // clamp radius to 5 to avoid huge cones
-			float C = std::tan(0.5f * light.spot_fov); // cone radius factor from FOV
-			light_to_world = light_to_world * glm::mat4( // scale cone by C*R (x/y) and R (z)
-				C*R, 0.0f, 0.0f, 0.0f,
-				0.0f, C*R, 0.0f, 0.0f,
-				0.0f, 0.0f, R, 0.0f,
-				0.0f, 0.0f, 0.0f, 1.0f
-			);
-		} else if (light.type == Scene::Light::Directional) {
-			glUniform1i(prog->LIGHT_TYPE_int, 3); // directional light type
-			glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
-			mesh = &light_meshes->everything; // full-screen geometry for directional
-			float R = 1.0f; // unused scale
-			light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
-				R, 0.0f, 0.0f, 0.0f,
-				0.0f, R, 0.0f, 0.0f,
-				0.0f, 0.0f, R, 0.0f,
-				0.0f, 0.0f, 0.0f, 1.0f
-			);
+			glUniformMatrix4fv(light_stencil_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, 
+				glm::value_ptr(world_to_clip * glm::mat4(light.transform->make_world_from_local())));
+
+			Mesh const *mesh = nullptr; // pointer to chosen light-volume mesh for this light
+
+			if (light.type == Scene::Light::Point) {
+				mesh = &light_meshes->cube; // use cube mesh as bounding volume for point light
+			} else if (light.type == Scene::Light::Hemisphere) {
+				mesh = &light_meshes->everything; // full-screen geometry
+			} else if (light.type == Scene::Light::Spot) {
+				mesh = &light_meshes->cone; // use cone mesh for spot volume
+			} else if (light.type == Scene::Light::Directional) {
+				mesh = &light_meshes->everything; // full-screen geometry for directional
+			}
+
+			if (mesh && mesh->count) { // if we have geometry, draw the light volume
+				glDrawArrays(mesh->type, mesh->start, mesh->count); // render light-volume; shader reads G-buffers to accumulate lighting
+			}
 		}
-		glUniformMatrix4fv(prog->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(world_to_clip * light_to_world)); // upload light-volume transform to clip space
 
-		if (mesh && mesh->count) { // if we have geometry, draw the light volume
-			glDrawArrays(mesh->type, mesh->start, mesh->count); // render light-volume; shader reads G-buffers to accumulate lighting
+		{ // --- light mesh pass
+			//glStencilFunc(GL_NOTEQUAL, 0, 255);
+			glEnable(GL_BLEND); // enable blending to accumulate light contributions
+			glDisable(GL_DEPTH_TEST);
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_FRONT);
+			glStencilFunc(GL_NOTEQUAL, 0, 255);
+			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+			//draw geometry for each light:
+			auto &prog = basic_material_deferred_light_program; // reference to the deferred-light shader wrapper
+			glUseProgram(prog->program); // bind the deferred-light shader program
+
+			glBindVertexArray(light_for_basic_material_deferred_light); // bind VAO containing the light-volume geometry
+
+			glActiveTexture(GL_TEXTURE0); // select texture unit 0
+			glBindTexture(GL_TEXTURE_2D, fb.position_tex); // bind world-space position G-buffer to unit 0
+			glActiveTexture(GL_TEXTURE1); // select texture unit 1
+			glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex); // bind normal+roughness G-buffer to unit 1
+			glActiveTexture(GL_TEXTURE2); // select texture unit 2
+			glBindTexture(GL_TEXTURE_2D, fb.albedo_tex); // bind albedo (color) G-buffer to unit 2
+			
+			glm::mat4 light_to_world = light.transform->make_world_from_local(); // compute light's model-to-world transform
+
+			Mesh const *mesh = nullptr; // pointer to chosen light-volume mesh for this light
+
+			glUniform3fv(prog->EYE_vec3, 1, glm::value_ptr(eye)); // upload camera/eye position (in light-space)
+			glUniform3fv(prog->LIGHT_LOCATION_vec3, 1, glm::value_ptr(glm::vec3(light_to_world[3]))); // upload light position
+			glUniform3fv(prog->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(-light_to_world[2]))); // upload light direction (negated forward)
+			glUniform3fv(prog->LIGHT_ENERGY_vec3, 1, glm::value_ptr(light.energy)); // upload light energy/color
+			if (light.type == Scene::Light::Point) {
+				glUniform1i(prog->LIGHT_TYPE_int, 0); // tell shader this is a point light
+				glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // cutoff not used for point here (set to 1)
+				mesh = &light_meshes->cube; // use cube mesh as bounding volume for point light
+				//when is energy / dis^2 < 1/256.0f?
+				float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // compute influence radius from energy
+				light_to_world = light_to_world * glm::mat4( // scale the light-volume by R
+					R, 0.0f, 0.0f, 0.0f,
+					0.0f, R, 0.0f, 0.0f,
+					0.0f, 0.0f, R, 0.0f,
+					0.0f, 0.0f, 0.0f, 1.0f
+				);
+			} else if (light.type == Scene::Light::Hemisphere) {
+				glUniform1i(prog->LIGHT_TYPE_int, 1); // hemisphere light type
+				glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
+				mesh = &light_meshes->everything; // full-screen geometry
+				float R = 1.0f; // radius unused/1
+				light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
+					R, 0.0f, 0.0f, 0.0f,
+					0.0f, R, 0.0f, 0.0f,
+					0.0f, 0.0f, R, 0.0f,
+					0.0f, 0.0f, 0.0f, 1.0f
+				);
+			} else if (light.type == Scene::Light::Spot) {
+				glUniform1i(prog->LIGHT_TYPE_int, 2); // spot light type
+				glUniform1f(prog->LIGHT_CUTOFF_float, std::cos(0.5f * light.spot_fov)); // upload spot cutoff cosine
+				mesh = &light_meshes->cone; // use cone mesh for spot volume
+				float R = std::sqrt(256.0f * std::max(light.energy.x, std::max(light.energy.y, light.energy.z))); // estimate radius from energy
+				//HACK: hard-limit to 5 units:
+				R = 5.0f; // clamp radius to 5 to avoid huge cones
+				float C = std::tan(0.5f * light.spot_fov); // cone radius factor from FOV
+				light_to_world = light_to_world * glm::mat4( // scale cone by C*R (x/y) and R (z)
+					C*R, 0.0f, 0.0f, 0.0f,
+					0.0f, C*R, 0.0f, 0.0f,
+					0.0f, 0.0f, R, 0.0f,
+					0.0f, 0.0f, 0.0f, 1.0f
+				);
+			} else if (light.type == Scene::Light::Directional) {
+				glUniform1i(prog->LIGHT_TYPE_int, 3); // directional light type
+				glUniform1f(prog->LIGHT_CUTOFF_float, 1.0f); // no cutoff
+				mesh = &light_meshes->everything; // full-screen geometry for directional
+				float R = 1.0f; // unused scale
+				light_to_world = light_to_world * glm::mat4( // apply uniform scale of 1
+					R, 0.0f, 0.0f, 0.0f,
+					0.0f, R, 0.0f, 0.0f,
+					0.0f, 0.0f, R, 0.0f,
+					0.0f, 0.0f, 0.0f, 1.0f
+				);
+			}
+			glUniformMatrix4fv(prog->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(world_to_clip * light_to_world)); // upload light-volume transform to clip space
+
+			if (mesh && mesh->count) { // if we have geometry, draw the light volume
+				glDrawArrays(mesh->type, mesh->start, mesh->count); // render light-volume; shader reads G-buffers to accumulate lighting
+			}
 		}
+
+		glDisable(GL_STENCIL_TEST);
 	}
 
 	glActiveTexture(GL_TEXTURE2); // restore texture unit 2
@@ -2067,8 +2120,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glBindVertexArray(0);                   // Unbind VAO
 	glUseProgram(0);                        // Unbind shader program
 
-	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-	glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
+	// glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	// glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
