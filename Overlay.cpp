@@ -86,9 +86,9 @@ Overlay::Overlay() {
         glm::value_ptr(glm::vec2(initial_size)));
     glUseProgram(0);
 }
-void Overlay::resize(glm::uvec2 const &size) {
-    if (this->size == size) return;
-    this->size = size;
+void Overlay::resize(glm::uvec2 const &overlay_size) {
+    if (size == overlay_size) return;
+    size = overlay_size;
 
     if (tex == 0) {
         glGenTextures(1, &tex);
@@ -132,6 +132,8 @@ void Overlay::draw() {
     glBindVertexArray(overlay_program->empty_vao);
     glUniform2fv(overlay_program->SCREEN_SIZE_vec2, 1, glm::value_ptr(glm::vec2(size)));
     for (auto elem : elements) {
+        if (!elem.second.visible) continue;
+
         glUniform2fv(overlay_program->POSITION_vec2, 1, glm::value_ptr(elem.second.position));
         glUniform4fv(overlay_program->COLOR_vec4, 1, glm::value_ptr(elem.second.color));
         glUniform2fv(overlay_program->SIZE_vec2, 1, glm::value_ptr(elem.second.size));
@@ -179,8 +181,8 @@ void Overlay::remove_interaction(std::string name) {
 };
 
 void Overlay::handle_click(glm::uvec2 click_position) {
-    float aspect = size.x / size.y;
-    float orig_aspect = initial_size.x / initial_size.y;
+    float aspect = (float)size.x / (float)size.y;
+    float orig_aspect = (float)initial_size.x / (float)initial_size.y;
     float scale = (glm::vec2(size) / glm::vec2(initial_size))[(size_t)(aspect > orig_aspect)];
 
     for (auto p : interactions) {

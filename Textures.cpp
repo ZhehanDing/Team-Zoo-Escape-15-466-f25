@@ -176,3 +176,17 @@ Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> c
     }
 
     return ret; });
+
+
+const std::vector< NamedTexture > ui_named_textures = {
+    {"Stalk Tooltip", "textures/stalk_tooltip.png"},
+    {"Play Button", "textures/play_button.png"}
+};
+
+Load<std::map<std::string, GLuint>> ui_textures(LoadTagDefault, []() -> std::map<std::string, GLuint> const * {
+    auto ret = new std::map<std::string, GLuint>();
+    for (auto const &nt : ui_named_textures) {
+        ret->insert({nt.prefix, Texture::load_from_png(data_path(nt.filename))});
+    }
+    return ret; 
+});

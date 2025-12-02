@@ -1,7 +1,9 @@
 #pragma once
 #include "GL.hpp"
 #include "Load.hpp"
+#include <string>
 #include <vector>
+#include <map>
 
 struct Texture
 {
@@ -17,3 +19,4 @@ struct NamedTexture
 extern const std::vector<NamedTexture> named_textures;
 
 extern Load<std::vector<GLuint>> textures;
+extern Load<std::map<std::string, GLuint>> ui_textures;

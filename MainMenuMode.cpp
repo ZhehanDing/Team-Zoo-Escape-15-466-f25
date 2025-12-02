@@ -354,8 +354,8 @@ void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
 */
 
 MainMenuMode::MainMenuMode() {
-    overlay.add_element("button", glm::vec2(0.f), glm::vec2(500.f, 200.f), glm::vec4(1.f), textures->at(0));
-    overlay.add_interaction("button", []() -> void { 
+    overlay.add_element("Play Button", glm::vec2(0.f), glm::vec2(896.f, 384.f) * .5f, glm::vec4(1.f), ui_textures->find("Play Button")->second);
+    overlay.add_interaction("Play Button", []() -> void { 
         Mode::set_current(std::make_shared< PlayMode >());
     });
 }

@@ -825,6 +825,14 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	dust_pg.spawn_offset = glm::vec3(0.f, 0.f, .15f);
 
 	dust_pg.transform.parent = player;
+
+	overlay.add_element(
+		"Stalk Tooltip", 
+		glm::vec2(350.f, -100.f), 
+		glm::vec2(896.f, 384.f) * .125f, 
+		glm::vec4(1.f), 
+		ui_textures->find("Stalk Tooltip")->second
+	);
 }
 
 void PlayMode::trigger_game_over() {
@@ -1101,6 +1109,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		}
 		if (evt.button.button == SDL_BUTTON_RIGHT) {
 			// Toggle ON:
+			overlay.elements["Stalk Tooltip"].visible = false;
 			focus_mode = true;
 			stalking = true;
 			player_speed_factor = 0.2f;		// slow to 50%
@@ -1171,6 +1180,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP) {
 		if (evt.button.button == SDL_BUTTON_RIGHT) {
 			// Toggle OFF:
+			overlay.elements["Stalk Tooltip"].visible = true;
 			focus_mode = false;
 			stalking = false;
 			player_speed_factor = 1.0f;
@@ -1729,57 +1739,6 @@ void PlayMode::update(float elapsed) {
 
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
-	//11/24 update Alex Ding
-	// --- MAIN MENU SCREEN ---
-    if (screen_state == ScreenState::MENU) {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, drawable_size.x, drawable_size.y);
-
-    glDisable(GL_DEPTH_TEST);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	float aspect = float(drawable_size.x) / float(drawable_size.y);
-
-	DrawLines lines(glm::mat4(
-		1.0f / aspect, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f));
-
-	glm::u8vec4 white = glm::u8vec4(0xff, 0xff, 0xff, 0xff);
-
-	constexpr float H = 0.09f;
-	float H_small = H * 0.6f;
-	float left_x = -0.9f * aspect;
-
-	// Title
-	lines.draw_text(
-		"ZOO ESCAPE",
-		glm::vec3(left_x, 0.5f, 0.0f),
-		glm::vec3(H, 0.0f, 0.0f),
-		glm::vec3(0.0f, H, 0.0f),
-		white);
-
-	// "Play" instruction
-	lines.draw_text(
-		"Press ENTER to Play",
-		glm::vec3(left_x, 0.1f, 0.0f),
-		glm::vec3(H_small, 0.0f, 0.0f),
-		glm::vec3(0.0f, H_small, 0.0f),
-		white);
-
-	// "Quit" instruction
-	lines.draw_text(
-		"Press ESC to Quit",
-		glm::vec3(left_x, -0.1f, 0.0f),
-		glm::vec3(H_small, 0.0f, 0.0f),
-		glm::vec3(0.0f, H_small, 0.0f),
-		white);
-
-	glEnable(GL_DEPTH_TEST);
-	return; // important: don't draw the 3D scene
-	}
 	//11/23 Update
 	// --- GAME OVER SCREEN: clear everything and only draw text ---
 	if (game_over) {
@@ -2452,6 +2411,22 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 							glm::u8vec4(0xff, 0xff, 0xff, 0x00));
 		}
+	}
+
+	{ // draw ui elements
+		overlay.resize(drawable_size);
+		overlay.draw();
+		
+		glBindVertexArray(empty_vao);
+		glUseProgram(copy_to_screen_program->program);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, overlay.tex);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindVertexArray(0);
+		glUseProgram(0);
+		
+		GL_ERRORS();
 	}
 	/*
 	if (deer_ui_tex && deer_ui_size.x && deer_ui_size.y) {

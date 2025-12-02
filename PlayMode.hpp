@@ -21,6 +21,8 @@
 #include "Particles.hpp" 
 #include "Sampler.hpp" 
 
+#include "Overlay.hpp"
+
 struct PlayMode : Mode {
 	PlayMode();
 	virtual ~PlayMode();
@@ -41,6 +43,7 @@ struct PlayMode : Mode {
 
 	// local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
+	Overlay overlay;
 
 	std::vector<Civilian> civilians;
 	std::vector< Scene::Drawable * > civilian_drawables;
@@ -164,7 +167,7 @@ struct PlayMode : Mode {
 		PLAYING,   // normal gameplay
 	};
 
-	ScreenState screen_state = ScreenState::MENU;
+	ScreenState screen_state = ScreenState::PLAYING;
 
 	// Enemy collapse animation (after execution)
 	bool enemy_collapsing = false;

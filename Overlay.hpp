@@ -47,6 +47,7 @@ struct Overlay {
         glm::vec2 size; // width, height
         glm::vec4 color;
         GLuint tex = 0;
+        bool visible = true;
     };
 
     void resize(glm::uvec2 const &drawable_size);
