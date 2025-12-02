@@ -1385,10 +1385,10 @@ void PlayMode::update(float elapsed) {
 
 	// --- Player movement (WASD, relative to camera) ---
 	{
+		glm::vec3 new_pos = player->position;
 		dust_pg.set_spawn_rate(0.f);
-		if (dashing)
-		{
-			player->position += dash_dir * dash_speed * elapsed;
+		if (dashing) {
+			new_pos += dash_dir * dash_speed * elapsed;
 			dust_pg.set_spawn_rate(.1f);
 		} else {
 			constexpr float PlayerSpeed = 7.5f;
@@ -1439,28 +1439,27 @@ void PlayMode::update(float elapsed) {
 				// get player forward
 				glm::vec3 player_forward = player->rotation * -glm::vec3(0.f, 1.f, 0.f);
 
-				glm::vec3 new_pos = player->position + player_forward * PlayerSpeed * player_speed_factor * elapsed;
-
-				// printf("Trying move to: %.2f, %.2f, %.2f\n", new_pos.x, new_pos.y, new_pos.z);
-
-				CollisionHits hits = query_world_collisions(
-					new_pos,
-					gate_can_open ? nullptr : gate_collider,
-					deer_fence_collider,
-					zoo_fence_near_collider,
-					zoo_fence_far_collider);
-
-				if (hits.escaped())
-				{
-					trigger_game_success();
-				}
-				else if (!hits.any())
-				{
-					player->position = new_pos;
-				}
-				cam->update_camera(glm::vec2(0.f));
+				new_pos += player_forward * PlayerSpeed * player_speed_factor * elapsed;
 			}
+				// printf("Trying move to: %.2f, %.2f, %.2f\n", new_pos.x, new_pos.y, new_pos.z);
 		}
+
+		CollisionHits hits = query_world_collisions(
+			new_pos,
+			gate_can_open ? nullptr : gate_collider,
+			deer_fence_collider,
+			zoo_fence_near_collider,
+			zoo_fence_far_collider);
+
+		if (hits.escaped())
+		{
+			trigger_game_success();
+		}
+		else if (!hits.any())
+		{
+			player->position = new_pos;
+		}
+		cam->update_camera(glm::vec2(0.f));
 	}
 
 	// --- Enemy on-screen check (clip-space) ---
