@@ -366,13 +366,12 @@ MainMenuMode::~MainMenuMode() {
 bool MainMenuMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
     if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         if (evt.button.button == SDL_BUTTON_LEFT){
-            float mouse_x, mouse_y;
-            SDL_GetMouseState(&mouse_x, &mouse_y);
             // SDL top-left -> OpenGL bot-left
             GLint viewport[4];
             glGetIntegerv(GL_VIEWPORT, &viewport[0]);
-            mouse_y = viewport[3] - mouse_y;
-            overlay.handle_click(glm::uvec2(mouse_x, mouse_y));
+			float mouse_x = evt.button.x;
+            float mouse_y = viewport[3] - evt.button.y;
+			overlay.handle_click(glm::uvec2(mouse_x, mouse_y));
         }
     }
     return false;
