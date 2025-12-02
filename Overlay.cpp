@@ -150,12 +150,13 @@ void Overlay::draw() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void Overlay::add_element(std::string name, glm::vec2 position, glm::vec2 elem_size, glm::vec4 color, GLuint elem_tex) {
+void Overlay::add_element(std::string name, glm::vec2 position, glm::vec2 elem_size, glm::vec4 color, GLuint elem_tex, bool visible) {
     Element element;
     element.position = position;
     element.size = elem_size;
     element.color = color;
     element.tex = elem_tex;
+    element.visible = visible;
     elements.insert({ name, element });
 }
 void Overlay::add_element(std::string name, Element element) {

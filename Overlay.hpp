@@ -51,7 +51,7 @@ struct Overlay {
     };
 
     void resize(glm::uvec2 const &drawable_size);
-    void add_element(std::string name, glm::vec2 position, glm::vec2 size, glm::vec4 color, GLuint tex);
+    void add_element(std::string name, glm::vec2 position, glm::vec2 size, glm::vec4 color, GLuint tex, bool visible=true);
     void add_element(std::string name, Element element);
     void remove_element(std::string name);
 
