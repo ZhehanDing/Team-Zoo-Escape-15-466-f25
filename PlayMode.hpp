@@ -50,7 +50,6 @@ struct PlayMode : Mode {
 	Scene::Transform *execution_target = nullptr;
 	
 	Scene::Transform *player = nullptr;
-	Scene::Transform *enemy = nullptr;
 	Scene::Transform *final_deer = nullptr;
 	Scene::Transform *final_deer_leg = nullptr;
 	Scene::Transform *sky = nullptr;
@@ -66,22 +65,6 @@ struct PlayMode : Mode {
 	int deer_stage = 0; // 0 = original deer, 1 = deer + leg, 2 = ... etc.
 	glm::quat player_base_rotation;
 
-	std::unique_ptr< Skeleton > enemy_skeleton;
-	std::vector< std::unique_ptr< RiggedMesh > > enemy_rigs;
-	std::vector< Scene::Drawable * > enemy_drawables;
-	Scene::Drawable *enemy_hat_drawable = nullptr;
-	Scene::Drawable *enemy_base_drawable = nullptr;
-	std::vector< std::pair< Scene::Drawable *, uint32_t > > enemy_fade_drawables;
-	float enemy_fade_duration = 1.0f; // Fade out duration
-	float enemy_fade_timer = 0.0f;
-	AnimationGraph< Skeleton::BoneTransform > enemy_graph =
-		AnimationGraph< Skeleton::BoneTransform >(
-			[](Skeleton::BoneTransform const &a,
-			   Skeleton::BoneTransform const &,
-			   float) { return a; });
-
-	float enemy_mesh_scale = 1.0f;
-	glm::vec3 enemy_mesh_offset = glm::vec3(0.0f);
 
 	// Deer Human
 	std::unique_ptr< Skeleton > deer_human_skeleton;
@@ -126,20 +109,7 @@ struct PlayMode : Mode {
 
 	//Excution mode
 	bool execution_mode = false;        // Trigger
-	bool enemy_alive = true;            // Detect is alive or not
 	float execution_range = 15.0f;       // excution area
-
-	// --- enemy patrol ---
-	enum EnemyState { ENEMY_STAND, ENEMY_WALK, ENEMY_BETWEEN };
-	EnemyState enemy_state = ENEMY_WALK;
-	std::vector< glm::vec3 > enemy_waypoints;
-	size_t enemy_wp_idx = 0;
-	float enemy_speed = 6.0f;		   // units/sec
-	float enemy_wait_timer = 0.0f;	   // seconds left to wait at a waypoint
-	float enemy_wait_at_point = 0.4f;  // pause duration
-	float enemy_reach_epsilon = 0.15f; // how close counts as "arrived"
-	glm::quat enemy_base_rotation;	   // remember original facing
-	bool enemy_transitioning_to_dead = false;
 	// Enemy vision
 	bool being_watched = false; // updated in update(), read in draw()
 	Civilian *watching_civilian = nullptr;
@@ -158,8 +128,6 @@ struct PlayMode : Mode {
 
 	bool game_success = false;
 	void trigger_game_success();
-
-	void enemy_to_dead();
 	//11/24 update
 	// --- high-level game screen state ---
 	enum class ScreenState {
@@ -168,13 +136,6 @@ struct PlayMode : Mode {
 	};
 
 	ScreenState screen_state = ScreenState::PLAYING;
-
-	// Enemy collapse animation (after execution)
-	bool enemy_collapsing = false;
-	float enemy_collapse_t = 0.0f;
-	float enemy_collapse_duration = 0.7f; // seconds
-	glm::quat enemy_collapse_start;
-	glm::quat enemy_collapse_end;
 	//UI
 	GLuint deer_ui_tex = 0;        // 
 	glm::uvec2 deer_ui_size = glm::uvec2(0); //
@@ -220,6 +181,7 @@ struct PlayMode : Mode {
 	float dash_hint_timer = 0.0f;   // seconds
 	bool sound_hint_active =false;
 	float sound_hint_timer = 0.0f;   // seconds
+	float watched_tooltip_timer = 0.0f;   // seconds, for pulsing effect
 	bool pass_hint_active =false;
 	float pass_hint_timer = 200.0f;
 };

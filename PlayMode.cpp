@@ -238,17 +238,6 @@ struct FB {
 	}
 } fb;
 
-Load< MeshBuffer > enemy_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	return new MeshBuffer(data_path("enemy.pnct"));
-});
-
-Load< BoneInfluenceBuffer > enemy_infls(LoadTagDefault, []() -> BoneInfluenceBuffer const * {
-	return new BoneInfluenceBuffer(data_path("enemy.infl"));
-});
-
-Load<SkeletonBuffer> enemy_skeletons(LoadTagDefault, []() {
-    return new SkeletonBuffer(data_path("enemy.skel"));
-});
 
 Load< MeshBuffer > deer_human_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	return new MeshBuffer(data_path("deer_human.pnct"));
@@ -408,7 +397,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
-		if (transform.name == "Enemy") enemy = &transform;
 		if (transform.name == "Final_Deer") final_deer = &transform;
 		if (transform.name == "Final_Deer Leg") {
 			final_deer_leg = &transform;
@@ -431,7 +419,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		// }
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
-	if (enemy == nullptr) throw std::runtime_error("enemy not found.");
 	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
 	if (final_deer_leg == nullptr) throw std::runtime_error("final_deer_leg not found.");
 	if (sky == nullptr) throw std::runtime_error("sky not found.");
@@ -445,15 +432,12 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 
 	bg_loop = Sound::loop(*bg_sample, .75f, 0.0f);
 
-	scene.drawables.remove_if([this](Scene::Drawable const &drawable) {
-		return drawable.transform == enemy;
-	});
-
 	player_base_rotation = player->rotation;
 
-	Skeleton const &enemy_skel = enemy_skeletons->lookup("Human.rigify");
-
-	enemy_skeleton = std::make_unique< Skeleton >(enemy_skel);
+	// Load deer human
+	Skeleton const &deer_human_skel = deer_human_skeletons->lookup("Human.rigify");
+	deer_human_skeleton = std::make_unique< Skeleton >(deer_human_skel);
+	
 	auto g = [](const Skeleton::BoneTransform &a,
 				const Skeleton::BoneTransform &b,
 				float t) {
@@ -463,101 +447,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		out.scale = glm::mix(a.scale, b.scale, t);
 		return out;
 	};
-	
-	enemy_graph = AnimationGraph< Skeleton::BoneTransform >(g);
-	enemy_graph.add_state(human_animations->lookup("Stand"));
-	enemy_graph.add_state(human_animations->lookup("Walk"));
-	enemy_graph.add_state(human_animations->lookup("StandToWalk"));
-	enemy_graph.add_state(human_animations->lookup("WalkToStand"));
-	enemy_graph.add_state(human_animations->lookup("WalkToDead"));
-	
-	// Start with Stand animation
-	auto stand_it = enemy_graph.states.find("Stand");
-	if (stand_it != enemy_graph.states.end()) {
-		enemy_graph.current_state = &stand_it->second;
-		enemy_graph.playback = 0.0f;
-		enemy_graph.keyframe_index = 0;
-	}
-	enemy_state = ENEMY_STAND;
-	
-	std::vector<std::string> renderable_mesh_names;
-	for (const auto& mesh_pair : enemy_meshes->meshes) {
-		const std::string& mesh_name = mesh_pair.first;
-		if (mesh_name.find("WGT-") == 0) continue;
-		renderable_mesh_names.push_back(mesh_name);
-	}
-	enemy_rigs.clear();
-	enemy_rigs.reserve(renderable_mesh_names.size());
-	enemy_drawables.clear();
-	enemy_drawables.reserve(renderable_mesh_names.size());
-	
-	for (const std::string& mesh_name : renderable_mesh_names) {
-		const Mesh& mesh = enemy_meshes->lookup(mesh_name);
-		enemy_rigs.emplace_back(std::make_unique< RiggedMesh >(
-			enemy_meshes->buffer, enemy_infls->buffer, mesh, *enemy_skeleton, &enemy_graph));
-		enemy_rigs.back()->anim_graph = &enemy_graph;
-
-		scene.drawables.emplace_back(enemy);
-		Scene::Drawable &drawable = scene.drawables.back();
-		enemy_drawables.push_back(&drawable);
-		drawable.pipeline = skinning_deferred_program_pipeline;
-		drawable.pipeline.vao = enemy_rigs.back()->make_vao_for_program(skinning_deferred_program->program);
-		drawable.pipeline.type = mesh.type;
-		drawable.pipeline.start = mesh.start;
-		drawable.pipeline.count = mesh.count;
-		
-		if (mesh_name == "fedora_cocked") {
-			enemy_hat_drawable = &drawable;
-		}
-		if (mesh_name == "base") {
-			enemy_base_drawable = &drawable;
-		}
-		
-		std::vector<std::string> keep_visible = {
-			"fedora_cocked",
-			"male_elegantsuit01",
-			"punkduck_tennis_shoes",
-			"toigo_ankle_boots_male"
-		};
-		bool keep_visible_mesh = false;
-		for (const std::string& keep_name : keep_visible) {
-			if (mesh_name == keep_name) {
-				keep_visible_mesh = true;
-				break;
-			}
-		}
-		if (!keep_visible_mesh) {
-			enemy_fade_drawables.push_back({&drawable, mesh.count});
-		}
-		
-		bool found_texture = false;
-		for (size_t i = 0; i < named_textures.size(); ++i) {
-			if (mesh_name == named_textures[i].prefix || mesh_name.rfind(named_textures[i].prefix, 0) == 0) {
-				if (i < textures->size()) {
-					GLuint tex_id = (*textures)[i];
-					if (tex_id != 0) {
-						drawable.pipeline.textures[0].texture = tex_id;
-						drawable.pipeline.textures[0].target = GL_TEXTURE_2D;
-						found_texture = true;
-						break;
-					}
-				}
-			}
-		}
-		if (!found_texture) {
-			std::cout << "No texture found for enemy mesh '" << mesh_name << std::endl;
-		}
-		
-		auto rig_ptr = enemy_rigs.back().get();
-		drawable.pipeline.set_uniforms = [rig_ptr]() {
-			rig_ptr->bind_pose_ubo();
-			glUniform1f(skinning_deferred_program->ROUGHNESS_float, 0.5f);
-		};
-	}
-
-	// Load deer human
-	Skeleton const &deer_human_skel = deer_human_skeletons->lookup("Human.rigify");
-	deer_human_skeleton = std::make_unique< Skeleton >(deer_human_skel);
 	
 	deer_human_graph = AnimationGraph< Skeleton::BoneTransform >(g);
 	deer_human_graph.add_state(human_animations->lookup("Stand"));
@@ -740,19 +629,6 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	cam->set_sensitivity(1.5f);
 	cam->set_max_distance_from_camera_center(5.f);
 	// cam->set_pitch_range(-(float)M_PI, 0.f); //default
-
-	enemy_base_rotation = enemy->rotation;
-
-	// build a simple square/loop around the enemy's start position:
-	glm::vec3 e0 = enemy->position;
-	float R = 6.0f; // patrol radius
-	enemy_waypoints = {
-		e0 + glm::vec3(0.0f, R, 0.0f),
-		e0 + glm::vec3(R, 0.0f, 0.0f),
-		e0 + glm::vec3(0.0f, -R, 0.0f),
-		e0 + glm::vec3(-R, 0.0f, 0.0f)};
-	enemy_wp_idx = 0;
-	enemy_wait_timer = 0.0f;
 	/*
 	{
 		std::vector<glm::u8vec4> pixels;
@@ -830,9 +706,58 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		"Stalk Tooltip", 
 		glm::vec2(350.f, -100.f), 
 		glm::vec2(896.f, 384.f) * .125f, 
-		glm::vec4(1.f), 
+		glm::vec4(0.7f), 
 		ui_textures->find("Stalk Tooltip")->second
 	);
+	overlay.add_element(
+		"Kill Tooltip", 
+		glm::vec2(350.f, -100.f), 
+		glm::vec2(668.f, 367.f) * .125f, 
+		glm::vec4(0.7f), 
+		ui_textures->find("Kill Tooltip")->second
+	);
+	overlay.add_element(
+		"Lure Tooltip", 
+		glm::vec2(00.f, 0.f),  // offset
+		glm::vec2(1890.f, 636.f) * .125f,  // scale
+		glm::vec4(0.7f),  // color
+		ui_textures->find("Lure Tooltip")->second
+	);
+	overlay.add_element(
+		"Dash Tooltip", 
+		glm::vec2(0.f, 0.f), 
+		glm::vec2(2252.f, 724.f) * .125f, 
+		glm::vec4(0.7f), 
+		ui_textures->find("Dash Tooltip")->second
+	);
+	overlay.add_element(
+		"Move Tooltip", 
+		glm::vec2(350.f, -100.f), 
+		glm::vec2(1796.f, 542.f) * .125f, 
+		glm::vec4(0.7f), 
+		ui_textures->find("Move Tooltip")->second
+	);
+	overlay.add_element(
+		"Warning Tooltip", 
+		glm::vec2(0.f, 850.f),
+		glm::vec2(465.f, 465.f) * .3f, 
+		glm::vec4(1.f), 
+		ui_textures->find("Warning Tooltip")->second
+	);
+	overlay.add_element(
+		"Watched Tooltip", 
+		glm::vec2(0.f, 600.f),
+		glm::vec2(2030.f, 445.f) * .25f, 
+		glm::vec4(0.5f), 
+		ui_textures->find("Watched Tooltip")->second
+	);
+	overlay.elements["Kill Tooltip"].visible = false;
+	overlay.elements["Lure Tooltip"].visible = false;
+	overlay.elements["Dash Tooltip"].visible = false;
+	overlay.elements["Stalk Tooltip"].visible = false;
+	overlay.elements["Warning Tooltip"].visible = false;
+	overlay.elements["Watched Tooltip"].visible = false;
+	overlay.elements["Move Tooltip"].visible = true;
 }
 
 void PlayMode::trigger_game_over() {
@@ -848,27 +773,6 @@ void PlayMode::trigger_game_success() {
 	game_success = true;
 }
 
-void PlayMode::enemy_to_dead() {
-	if (!enemy || !enemy_alive || enemy_collapsing) return;
-	enemy_transitioning_to_dead = true;
-	
-	auto set_state = [&](const std::string &name) {
-		auto it = enemy_graph.states.find(name);
-		if (it != enemy_graph.states.end()) {
-			enemy_graph.current_state = &it->second;
-			enemy_graph.playback = 0.0f;
-			enemy_graph.keyframe_index = 0;
-		}
-	};
-	
-	if (enemy_state == ENEMY_STAND) {
-		set_state("StandToWalk");
-		enemy_state = ENEMY_BETWEEN;
-	} else if (enemy_state == ENEMY_WALK) {
-		set_state("WalkToDead");
-		enemy_state = ENEMY_BETWEEN;
-	}
-}
 
 PlayMode::~PlayMode() {
 	/*	// NEW: 释放 deer UI 资源
@@ -1077,27 +981,28 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			}
 			return true;
 		}
-		// TODO: Delete later! For testing purposes
-		else if (evt.key.key == SDLK_X)
-		{
-			is_deer_human = true;
-			enemy_to_dead();
-			return true;
-		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
+		if (overlay.start_show_stalk && !overlay.elements["Move Tooltip"].visible) {
+			overlay.elements["Stalk Tooltip"].visible = true;
+			overlay.start_show_stalk = false;
+		}
 		if (evt.key.key == SDLK_A) {
+			overlay.elements["Move Tooltip"].visible = false;
 			left.pressed = false;
 			stop_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_D) {
+			overlay.elements["Move Tooltip"].visible = false;
 			right.pressed = false;
 			stop_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_W) {
+			overlay.elements["Move Tooltip"].visible = false;
 			up.pressed = false;
 			stop_footstep_loop();
 			return true;
 		} else if (evt.key.key == SDLK_S) {
+			overlay.elements["Move Tooltip"].visible = false;
 			down.pressed = false;
 			stop_footstep_loop();
 			return true;
@@ -1133,6 +1038,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 					stalk_charge = 0.0f;
 
 					++kill_count;
+					overlay.elements["Kill Tooltip"].visible = false;
+					
 
 					blood_pg.burst_at(execution_target->position + glm::vec3(0.f, .5f, 0.f), 20);
 
@@ -1180,7 +1087,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP) {
 		if (evt.button.button == SDL_BUTTON_RIGHT) {
 			// Toggle OFF:
-			overlay.elements["Stalk Tooltip"].visible = true;
+			if (stalk_charge < 1 && !overlay.start_show_stalk && kill_count < 1) {
+				overlay.elements["Stalk Tooltip"].visible = true;
+			}
 			focus_mode = false;
 			stalking = false;
 			player_speed_factor = 1.0f;
@@ -1252,34 +1161,6 @@ void PlayMode::update(float elapsed) {
         pass_hint_active = false;
     	}
 	}
-	//
-	if (enemy_fade_timer > 0.0f) {
-		enemy_fade_timer = std::max(0.0f, enemy_fade_timer - elapsed);
-		float fade_progress = 1.0f - (enemy_fade_timer / enemy_fade_duration);
-		for (auto &[drawable, original_count] : enemy_fade_drawables) {
-			if (drawable) {
-				float remaining = 1.0f - fade_progress;
-				drawable->pipeline.count = (uint32_t)(original_count * remaining);
-			}
-		}
-	}
-
-	// --- Enemy collapse animation (after execution) ---
-	if (enemy && enemy_collapsing) {
-		enemy_collapse_t += elapsed;
-		float t = enemy_collapse_t / enemy_collapse_duration;
-		if (t > 1.0f) t = 1.0f;
-
-		// simple slerp from standing to “lying” pose
-		enemy->rotation = glm::slerp(enemy_collapse_start, enemy_collapse_end, t);
-
-		if (t >= 1.0f) {
-			enemy_collapsing = false; // finished collapsing
-		}
-	}
-	enemy->scale = glm::vec3(1.5f);
-	enemy_graph.update(elapsed);
-	
 	// Update deer human
 	if (is_deer_human) {
 		final_deer->scale = glm::vec3(0.0f);
@@ -1355,10 +1236,6 @@ void PlayMode::update(float elapsed) {
 				drawable->pipeline.count = 0;
 			}
 		}
-	}
-
-	for (auto& rig : enemy_rigs) {
-		rig->update(elapsed);
 	}
 
 	if (gate_anim_playing)  {
@@ -1520,16 +1397,16 @@ void PlayMode::update(float elapsed) {
 		}
 
 		// force pitch and player model to look towards stalk direction
-		//  - pitch is forced since enemy pos does not vary vertically
-		glm::vec3 to_enemy = enemy->position - player->position;
-		
-		// control for position of enemy center on screen
-		float target_pitch_ratio = 1.f + .05f;
-		float target_pitch = (std::atan2f(to_enemy.z, std::sqrtf(to_enemy.x * to_enemy.x + to_enemy.y * to_enemy.y)) 
-			+ cam->pitch_range.x / 2.f) * target_pitch_ratio;
+		if (execution_target) {
+			glm::vec3 to_target = execution_target->position - player->position;
+			
+			float target_pitch_ratio = 1.f + .05f;
+			float target_pitch = (std::atan2f(to_target.z, std::sqrtf(to_target.x * to_target.x + to_target.y * to_target.y)) 
+				+ cam->pitch_range.x / 2.f) * target_pitch_ratio;
 
-		// smooth force camera pitch by lerp
-		cam->pitch = cam->pitch * .6f + target_pitch * .4f;
+			// smooth force camera pitch by lerp
+			cam->pitch = cam->pitch * .6f + target_pitch * .4f;
+		}
 	} 
 
 	// --- Enemy sensing: FOV + distance (+ optional LOS hook) ---
@@ -1579,6 +1456,7 @@ void PlayMode::update(float elapsed) {
 	//2025/11/22 update
 	if (being_watched) {
 		watched_accum += elapsed;
+		watched_tooltip_timer += elapsed;
 		if (watched_accum >= watch_to_gameover) {
 			trigger_game_over();
 		}
@@ -1587,6 +1465,7 @@ void PlayMode::update(float elapsed) {
 	{
 		// continuous requirement: reset if not watched this frame
 		watched_accum = 0.0f;
+		watched_tooltip_timer = 0.0f;
 		if (watched_playing && watched_playing->stopped)
 		{
 			watched_playing.reset();
@@ -1597,130 +1476,12 @@ void PlayMode::update(float elapsed) {
 		}
 	}
 
-	// --- Enemy behavior: Stand-and-watch vs Patrol ---
-
-	if (enemy && enemy_alive && !enemy_collapsing) {
-		auto set_state = [&](const std::string &name) {
-			auto it = enemy_graph.states.find(name);
-			if (it != enemy_graph.states.end()) {
-				enemy_graph.current_state = &it->second;
-				enemy_graph.playback = 0.0f;
-				enemy_graph.keyframe_index = 0;
-			}
-		};
-		
-		if (enemy_state == ENEMY_BETWEEN && enemy_graph.current_state) {
-			const auto &anim = enemy_graph.current_state->animation;
-			if (!anim.loop && enemy_graph.playback >= anim.get_anim_length()) {
-				if (anim.name == "StandToWalk") {
-					if (enemy_transitioning_to_dead) {
-						set_state("WalkToDead");
-						enemy_state = ENEMY_BETWEEN;
-						auto walk_to_dead_it = enemy_graph.states.find("WalkToDead");
-						if (walk_to_dead_it != enemy_graph.states.end()) {
-							float anim_duration = walk_to_dead_it->second.animation.get_anim_length();
-							// Fade halfway through animation
-							enemy_fade_duration = anim_duration * 0.5f;
-							enemy_fade_timer = anim_duration * 0.5f;
-						}
-					} else {
-						set_state("Walk");
-						enemy_state = ENEMY_WALK;
-					}
-				} else if (anim.name == "WalkToStand") {
-					if (enemy_transitioning_to_dead) {
-						set_state("StandToWalk");
-						enemy_state = ENEMY_BETWEEN;
-					} else {
-						set_state("Stand");
-						enemy_state = ENEMY_STAND;
-					}
-				} else if (anim.name == "WalkToDead") {
-					enemy_transitioning_to_dead = false;
-					enemy_alive = false;
-					enemy_graph.playback = anim.get_anim_length();
-				}
-			}
-		}
-		
-		if (enemy_transitioning_to_dead && enemy_state == ENEMY_WALK) {
-			set_state("WalkToDead");
-			enemy_state = ENEMY_BETWEEN;
-			auto walk_to_dead_it = enemy_graph.states.find("WalkToDead");
-			if (walk_to_dead_it != enemy_graph.states.end()) {
-				float anim_duration = walk_to_dead_it->second.animation.get_anim_length();
-				// Fade completes at halfway through animation
-				enemy_fade_duration = anim_duration * 0.5f;
-				enemy_fade_timer = anim_duration * 0.5f;
-			}
-		}
-		
-		if (enemy_state != ENEMY_BETWEEN && !enemy_transitioning_to_dead) {
-			auto change_state = [&](EnemyState next) {
-				if (next == enemy_state) return;
-				if (enemy_state == ENEMY_STAND && next == ENEMY_WALK) {
-					set_state("StandToWalk");
-					enemy_state = ENEMY_BETWEEN;
-				} else if (enemy_state == ENEMY_WALK && next == ENEMY_STAND) {
-					set_state("WalkToStand");
-					enemy_state = ENEMY_BETWEEN;
-				} else {
-					set_state(next == ENEMY_STAND ? "Stand" : "Walk");
-					enemy_state = next;
-				}
-			};
-			
-			glm::vec2 to_player_xy(0.0f);
-			float to_player_dist = 0.0f;
-			if (player) {
-				glm::vec3 v = player->position - enemy->position;
-				to_player_xy = glm::vec2(v.x, v.y);
-				to_player_dist = glm::length(to_player_xy);
-			}
-
-			if (watched_latched) {
-				change_state(ENEMY_STAND);
-				if (to_player_dist > 1e-4f) {
-					glm::vec2 dir = to_player_xy / to_player_dist;
-					float yaw = std::atan2(dir.x, dir.y);
-					glm::quat target_rot = glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) * enemy_base_rotation;
-					enemy->rotation = glm::slerp(enemy->rotation, target_rot, 1.0f - std::exp(-8.0f * elapsed));
-				}
-			} else if (!enemy_waypoints.empty()) {
-				if (enemy_wait_timer > 0.0f) {
-					enemy_wait_timer = std::max(0.0f, enemy_wait_timer - elapsed);
-					change_state(ENEMY_STAND);
-				} else {
-					glm::vec3 target = enemy_waypoints[enemy_wp_idx];
-					glm::vec2 to = glm::vec2(target.x - enemy->position.x, target.y - enemy->position.y);
-					float dist = glm::length(to);
-
-					if (dist <= enemy_reach_epsilon) {
-						enemy_wp_idx = (enemy_wp_idx + 1) % enemy_waypoints.size();
-						enemy_wait_timer = enemy_wait_at_point;
-						change_state(ENEMY_STAND);
-					} else if (dist > 0.0f) {
-						change_state(ENEMY_WALK);
-						glm::vec2 dir = to / dist;
-						float step = std::min(enemy_speed * elapsed, dist);
-						enemy->position.x += dir.x * step;
-						enemy->position.y += dir.y * step;
-						enemy->position.z = 0.3f;
-						float yaw = std::atan2(dir.x, dir.y);
-						glm::quat target_rot = glm::angleAxis(yaw, glm::vec3(0.0f, 0.0f, 1.0f)) * enemy_base_rotation;
-						enemy->rotation = glm::slerp(enemy->rotation, target_rot, 1.0f - std::exp(-8.0f * elapsed));
-					}
-				}
-			}
-		}
-	}
-
 	// update civilians
 	for (auto &civilian : civilians) {
 		civilian_update(civilian, elapsed, player);
 	}
 	resolve_collisions(civilians);
-	civilian_avoid_obstacles(civilians, {{player, 0.7f}, {enemy, 0.7f}});
+	civilian_avoid_obstacles(civilians, {{player, 0.7f}});
 
 	// --- Audio listener follow player ---
 	{
@@ -1969,8 +1730,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glBindVertexArray(0);                   // Unbind VAO
 	glUseProgram(0);                        // Unbind shader program
 
-	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-	glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
+	// glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	// glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
@@ -1980,122 +1741,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	// draw particles
 	blood_pg.draw();
 	dust_pg.draw();
-
-	/*
-	for (Scene::Drawable *drawable : enemy_drawables) {
-		if (!drawable) continue;
-		
-		Scene::Drawable::Pipeline const &pipeline = drawable->pipeline;
-		
-		if (pipeline.program == 0 || pipeline.vao == 0 || pipeline.count == 0) continue;
-		glUseProgram(pipeline.program);
-		glBindVertexArray(pipeline.vao);
-		glm::mat4x3 world_from_object = drawable->transform->make_world_from_local();
-		glm::mat4 clip_from_object = clip_from_world * glm::mat4(world_from_object);
-		glUniformMatrix4fv(pipeline.CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_object));
-		
-		glm::mat4x3 light_from_object = light_from_world * glm::mat4(world_from_object);
-		glUniformMatrix4x3fv(pipeline.LIGHT_FROM_OBJECT_mat4x3, 1, GL_FALSE, glm::value_ptr(light_from_object));
-
-		glm::mat3 light_from_normal = glm::inverse(glm::transpose(glm::mat3(light_from_object)));
-		glUniformMatrix3fv(pipeline.LIGHT_FROM_NORMAL_mat3, 1, GL_FALSE, glm::value_ptr(light_from_normal));
-		
-		if (pipeline.set_uniforms) pipeline.set_uniforms();
-		
-		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
-			if (pipeline.textures[i].texture != 0) {
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(pipeline.textures[i].target, pipeline.textures[i].texture);
-			}
-		}
-		
-		glDrawArrays(pipeline.type, pipeline.start, pipeline.count);
-		
-		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
-			if (pipeline.textures[i].texture != 0) {
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(pipeline.textures[i].target, 0);
-			}
-		}
-		glActiveTexture(GL_TEXTURE0);
-	}
-	
-	// Draw deer_human only if active
-	if (is_deer_human) {
-		for (Scene::Drawable *drawable : deer_human_drawables) {
-		
-		Scene::Drawable::Pipeline const &pipeline = drawable->pipeline;
-		glUseProgram(pipeline.program);
-		glBindVertexArray(pipeline.vao);
-		
-		glm::mat4x3 world_from_object = drawable->transform->make_world_from_local();
-		glm::mat4 clip_from_object = clip_from_world * glm::mat4(world_from_object);
-		glUniformMatrix4fv(pipeline.CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_object));
-		glm::mat4x3 light_from_object = light_from_world * glm::mat4(world_from_object);
-		glUniformMatrix4x3fv(pipeline.LIGHT_FROM_OBJECT_mat4x3, 1, GL_FALSE, glm::value_ptr(light_from_object));
-		glm::mat3 light_from_normal = glm::inverse(glm::transpose(glm::mat3(light_from_object)));
-		glUniformMatrix3fv(pipeline.LIGHT_FROM_NORMAL_mat3, 1, GL_FALSE, glm::value_ptr(light_from_normal));
-		pipeline.set_uniforms();
-		
-		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
-			if (pipeline.textures[i].texture != 0) {
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(pipeline.textures[i].target, pipeline.textures[i].texture);
-			}
-		}
-		
-		glDrawArrays(pipeline.type, pipeline.start, pipeline.count);
-		
-		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
-			if (pipeline.textures[i].texture != 0) {
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(pipeline.textures[i].target, 0);
-			}
-		}
-		glActiveTexture(GL_TEXTURE0);
-		}
-	}
-	
-	// Draw civilian
-	for (Scene::Drawable *drawable : civilian_drawables) {
-		if (!drawable) continue;
-		
-		Scene::Drawable::Pipeline const &pipeline = drawable->pipeline;
-		
-		if (pipeline.program == 0 || pipeline.vao == 0 || pipeline.count == 0) continue;
-		glUseProgram(pipeline.program);
-		glBindVertexArray(pipeline.vao);
-		
-		glm::mat4x3 world_from_object = drawable->transform->make_world_from_local();
-		glm::mat4 clip_from_object = clip_from_world * glm::mat4(world_from_object);
-		glUniformMatrix4fv(pipeline.CLIP_FROM_OBJECT_mat4, 1, GL_FALSE, glm::value_ptr(clip_from_object));
-		
-		glm::mat4x3 light_from_object = light_from_world * glm::mat4(world_from_object);
-		glUniformMatrix4x3fv(pipeline.LIGHT_FROM_OBJECT_mat4x3, 1, GL_FALSE, glm::value_ptr(light_from_object));
-		glm::mat3 light_from_normal = glm::inverse(glm::transpose(glm::mat3(light_from_object)));
-		glUniformMatrix3fv(pipeline.LIGHT_FROM_NORMAL_mat3, 1, GL_FALSE, glm::value_ptr(light_from_normal));
-		
-		if (pipeline.set_uniforms) pipeline.set_uniforms();
-		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
-			if (pipeline.textures[i].texture != 0) {
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(pipeline.textures[i].target, pipeline.textures[i].texture);
-			}
-		}
-		
-		glDrawArrays(pipeline.type, pipeline.start, pipeline.count);
-		for (uint32_t i = 0; i < Scene::Drawable::Pipeline::TextureCount; ++i) {
-			if (pipeline.textures[i].texture != 0) {
-				glActiveTexture(GL_TEXTURE0 + i);
-				glBindTexture(pipeline.textures[i].target, 0);
-			}
-		}
-		glActiveTexture(GL_TEXTURE0);
-	}
-	
-	glUseProgram(0);
-	glBindVertexArray(0);
-	*/
 
 	//--- stalking mechanics ---
 	if (focus_mode) {
@@ -2162,7 +1807,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			// ... existing draw_lines / crosshair overlay code, just driven by c_ndc instead of enemy
 		}
 	}
-	if (focus_mode && enemy) {
+	if (focus_mode && execution_target) {
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
 		DrawLines lines(glm::mat4(
@@ -2199,10 +1844,14 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		const float H = 0.06f;
 		std::string stalk_text;
 		if (stalk_charge >= 1) {
-			stalk_text = "Stalk complete. Left click to attack human!";
+			stalk_text = "Stalk complete. Ready to kill human.";
+			overlay.elements["Kill Tooltip"].visible = (kill_count == 0);
+			overlay.elements["Stalk Tooltip"].visible = false;
+
 			stalk_fill_color = glm::u8vec4(0, 20, 0, 200);
 		} else {
 			stalk_text = "STALK " + std::to_string(int(stalk_charge * 100.0f)) + "%";
+			overlay.elements["Kill Tooltip"].visible = false;
 		}
 		// scan-fill using horizontal lines
 		const int stripes = 90; // more = more solid-looking fill
@@ -2222,26 +1871,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 		glEnable(GL_DEPTH_TEST);
 	}
-	if (being_watched) {
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
-		// Centered-ish: start slightly left of (0,0)
-		constexpr float H = 0.14f; // text size
-		glm::u8vec4 warn = glm::u8vec4(0xff, 0x40, 0x40, 0xff);
-		lines.draw_text("You are being watched!",
-			glm::vec3(-0.55f, 0.02f, 0.0f),   // tweak to taste for centering
-			glm::vec3(H, 0.0f, 0.0f),         // x step
-			glm::vec3(0.0f, H, 0.0f),         // y step
-			warn
-		);
-		glEnable(GL_DEPTH_TEST);
-	}
+	
 	//11/23 update Game over logic 
 	/*
 	if (game_over) {
@@ -2293,63 +1923,31 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 				kc_color
 			);
 
-			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
-							glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-							glm::u8vec4(0x00, 0x00, 0x00, 0xff));
-			float ofs = 2.0f / drawable_size.y;
-			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
-							glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
-							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-							glm::u8vec4(0xff, 0xff, 0xff, 0xff));
+			// lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
+			// 				glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+			// 				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+			// 				glm::u8vec4(0x00, 0x00, 0x00, 0xff));
+			// float ofs = 2.0f / drawable_size.y;
+			// lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
+			// 				glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+			// 				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+			// 				glm::u8vec4(0xff, 0xff, 0xff, 0xff));
 		}
-		// --- Dash Tutor Word showed up ---
-		//11/24 update Alex Ding
-		if (dash_hint_active) {
-			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
-
-			// ---- Center of screen ----
-			glm::vec3 anchor = glm::vec3(-0.3f, 0.0f, 0.0f);
-
-			// ---- BIG text scale ----
-			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
-			float pulse     = 0.5f + 0.5f * std::cos(dash_hint_timer * 4.0f);
-			float size      = 0.1f * (0.8f + 0.4f * pulse);
-			glm::vec3 x_dir = glm::vec3(size, 0.0f, 0.0f);   // width
-			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
-
-			lines.draw_text(
-				"PRESS SPACE TO DASH",
-				anchor,
-				x_dir,
-				y_dir,
-				hint_color,
-				nullptr
-				); // color
-		}
+		overlay.elements["Dash Tooltip"].visible = dash_hint_active;
+		overlay.elements["Lure Tooltip"].visible = sound_hint_active;
 
 		if (sound_hint_active) {
-			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
-
-			// ---- Center of screen ----
-			glm::vec3 anchor = glm::vec3(-0.4f, 0.0f, 0.0f);
-
-			// ---- BIG text scale ----
-			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
-
-			float pulse     = 0.5f + 0.5f * std::cos(sound_hint_timer * 4.0f);
-			float size      = 0.1f * (0.8f + 0.4f * pulse);
-			glm::vec3 x_dir = glm::vec3(size, 0.0f, 0.0f);   // width
-			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
-
-			lines.draw_text(
-				"PRESS G TO Attract Human",
-				anchor,
-				x_dir,
-				y_dir,
-				hint_color,
-				nullptr
-				); // color
+			float pulse = 0.5f + 0.5f * std::cos(dash_hint_timer * 4.0f);
+			float scale = 0.8f + 0.4f * pulse;
+			
+			glm::vec2 original_size = glm::vec2(1890.f, 636.f) * .325f;
+			overlay.elements["Lure Tooltip"].size = original_size * scale;
+			
+			float alpha = 0.7f + 0.3f * pulse;
+			overlay.elements["Lure Tooltip"].color = glm::vec4(1.f, 1.f, 1.f, alpha);
+		} else {
+			overlay.elements["Lure Tooltip"].size = glm::vec2(2252.f, 436.f) * .325f;
+			overlay.elements["Lure Tooltip"].color = glm::vec4(1.f);
 		}
 
 		if (pass_hint_active) {
@@ -2399,22 +1997,35 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 				nullptr
 				);
 		}
-		else
-		{
-			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
-							glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-							glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-			float ofs = 2.0f / drawable_size.y;
-			lines.draw_text("WASD moves character. Right click to stalk the human visitor to learn how human walks. Left click to attack when you have finished learning...",
-							glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
-							glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-							glm::u8vec4(0xff, 0xff, 0xff, 0x00));
-		}
 	}
 
 	{ // draw ui elements
 		overlay.resize(drawable_size);
+		
+		if (dash_hint_active) {
+			float pulse = 0.5f + 0.5f * std::cos(dash_hint_timer * 4.0f);
+			float scale = 0.8f + 0.4f * pulse;
+			
+			glm::vec2 original_size = glm::vec2(2252.f, 724.f) * .325f;
+			overlay.elements["Dash Tooltip"].size = original_size * scale;
+			
+			float alpha = 0.7f + 0.3f * pulse;
+			overlay.elements["Dash Tooltip"].color = glm::vec4(1.f, 1.f, 1.f, alpha);
+		} else {
+			overlay.elements["Dash Tooltip"].size = glm::vec2(2252.f, 436.f) * .325f;
+			overlay.elements["Dash Tooltip"].color = glm::vec4(1.f);
+		}
+		
+		if (being_watched) {
+			float pulse = 0.5f + 0.5f * std::cos(watched_tooltip_timer * 4.0f);
+			overlay.elements["Warning Tooltip"].visible = true;
+			overlay.elements["Warning Tooltip"].color = glm::vec4(1.f, 1.f, 1.f, pulse * 0.5f);
+			overlay.elements["Watched Tooltip"].visible = true;
+		} else {
+			overlay.elements["Warning Tooltip"].visible = false;
+			overlay.elements["Watched Tooltip"].visible = false;
+		}
+		
 		overlay.draw();
 		
 		glBindVertexArray(empty_vao);

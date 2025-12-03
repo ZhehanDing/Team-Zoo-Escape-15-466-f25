@@ -180,7 +180,13 @@ Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> c
 
 const std::vector< NamedTexture > ui_named_textures = {
     {"Stalk Tooltip", "textures/stalk_tooltip.png"},
-    {"Play Button", "textures/play_button.png"}
+    {"Lure Tooltip", "textures/lure_tooltip.png"},
+    {"Dash Tooltip", "textures/dash_tooltip.png"},
+    {"Kill Tooltip", "textures/kill_tooltip.png"},
+    {"Move Tooltip", "textures/move_tooltip.png"},
+    {"Watched Tooltip", "textures/watched_tooltip.png"},
+    {"Warning Tooltip", "textures/warning_tooltip.png"},
+    {"Play Button", "textures/play_button.png"},
 };
 
 Load<std::map<std::string, GLuint>> ui_textures(LoadTagDefault, []() -> std::map<std::string, GLuint> const * {

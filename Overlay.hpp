@@ -73,6 +73,8 @@ struct Overlay {
 
     void handle_click(glm::uvec2 click_position);
 
+    bool start_show_stalk = true;
+
     private:
         glm::uvec2 initial_size = glm::uvec2(0);
 };
