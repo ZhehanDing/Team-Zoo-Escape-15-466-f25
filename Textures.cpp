@@ -187,6 +187,8 @@ const std::vector< NamedTexture > ui_named_textures = {
     {"Watched Tooltip", "textures/watched_tooltip.png"},
     {"Warning Tooltip", "textures/warning_tooltip.png"},
     {"Play Button", "textures/play_button.png"},
+    {"Stalking Eye", "textures/stalking_eye.png"},
+    {"Knife", "textures/knife.png"},
 };
 
 Load<std::map<std::string, GLuint>> ui_textures(LoadTagDefault, []() -> std::map<std::string, GLuint> const * {

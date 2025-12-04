@@ -12,6 +12,8 @@ struct Camera {
     Scene::Camera *main = nullptr;
     Scene::Transform *anchor = nullptr;
 
+    glm::vec3 forward_xy, right_xy;
+
     glm::vec3 offset = glm::vec3(0.f);
     glm::vec2 pitch_range = glm::vec2(-(float)M_PI, 0.f);
     glm::vec2 yaw_range = glm::vec2(-(float) M_PI, (float)M_PI);

@@ -48,6 +48,7 @@ struct PlayMode : Mode {
 	std::vector<Civilian> civilians;
 	std::vector< Scene::Drawable * > civilian_drawables;
 	Scene::Transform *execution_target = nullptr;
+	Scene::Transform *stalk_target = nullptr;
 	
 	Scene::Transform *player = nullptr;
 	Scene::Transform *final_deer = nullptr;
@@ -103,13 +104,16 @@ struct PlayMode : Mode {
 	// rate per second:
 	float stalk_charge_rate = 0.2f;   // fills while holding RMB
 	// float stalk_decay_rate = 0.025f;    // drains when not holding
-	bool  stalking = false;           // true while RMB is held
+	bool stalking = false;           // true while RMB is held
 	bool enemy_visible = true; // updated in draw(), used in next update()
 	bool enemy_on_screen = false;	// NEW: updated in update() via clip-space test
+	glm::vec2 stalk_target_ndc;
+	float maximum_stalk_dist = 50.f;
 
 	//Excution mode
 	bool execution_mode = false;        // Trigger
-	float execution_range = 15.0f;       // excution area
+	float execution_range = 3.0f;       // excution area
+	glm::vec2 execution_target_ndc;
 	// Enemy vision
 	bool being_watched = false; // updated in update(), read in draw()
 	Civilian *watching_civilian = nullptr;

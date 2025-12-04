@@ -89,4 +89,13 @@ void Camera::update_camera(float delta_mouse_x, float delta_mouse_y, std::vector
     }
 
     main->transform->position = offset + frame_at * closest;
+
+    forward_xy = glm::vec3 (
+        std::sinf(yaw), 
+        -std::cos(yaw), 
+        0.f);
+    right_xy = glm::vec3 (
+        forward_xy.y, 
+        -forward_xy.x, 
+        0.f);
 }

@@ -725,61 +725,77 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	dust_pg.transform.parent = player;
 
 	overlay.add_element(
+		"Stalking Eye",
+		glm::vec2(0.f),
+		glm::vec2(512.f, 512.f) * .125f,
+		glm::vec4(.75f),
+		ui_textures->find("Stalking Eye")->second,
+		true
+	);
+	overlay.add_element(
+		"Knife",
+		glm::vec2(0.f),
+		glm::vec2(512.f, 512.f) * .125f,
+		glm::vec4(.8f),
+		ui_textures->find("Knife")->second,
+		true
+	);
+	overlay.add_element(
 		"Stalk Tooltip", 
 		glm::vec2(350.f, -100.f), 
 		glm::vec2(896.f, 384.f) * .125f, 
 		glm::vec4(0.7f), 
-		ui_textures->find("Stalk Tooltip")->second
+		ui_textures->find("Stalk Tooltip")->second,
+		true
 	);
 	overlay.add_element(
 		"Kill Tooltip", 
 		glm::vec2(350.f, -100.f), 
 		glm::vec2(668.f, 367.f) * .125f, 
 		glm::vec4(0.7f), 
-		ui_textures->find("Kill Tooltip")->second
+		ui_textures->find("Kill Tooltip")->second,
+		false
 	);
 	overlay.add_element(
 		"Lure Tooltip", 
 		glm::vec2(00.f, 0.f),  // offset
 		glm::vec2(1890.f, 636.f) * .125f,  // scale
 		glm::vec4(0.7f),  // color
-		ui_textures->find("Lure Tooltip")->second
+		ui_textures->find("Lure Tooltip")->second,
+		false
 	);
 	overlay.add_element(
 		"Dash Tooltip", 
 		glm::vec2(0.f, 0.f), 
 		glm::vec2(2252.f, 724.f) * .125f, 
 		glm::vec4(0.7f), 
-		ui_textures->find("Dash Tooltip")->second
+		ui_textures->find("Dash Tooltip")->second,
+		false
 	);
 	overlay.add_element(
 		"Move Tooltip", 
 		glm::vec2(350.f, -100.f), 
 		glm::vec2(1796.f, 542.f) * .125f, 
 		glm::vec4(0.7f), 
-		ui_textures->find("Move Tooltip")->second
+		ui_textures->find("Move Tooltip")->second,
+		true
 	);
 	overlay.add_element(
 		"Warning Tooltip", 
 		glm::vec2(0.f, 850.f),
 		glm::vec2(465.f, 465.f) * .3f, 
 		glm::vec4(1.f), 
-		ui_textures->find("Warning Tooltip")->second
+		ui_textures->find("Warning Tooltip")->second,
+		false
 	);
 	overlay.add_element(
 		"Watched Tooltip", 
 		glm::vec2(0.f, 600.f),
 		glm::vec2(2030.f, 445.f) * .25f, 
 		glm::vec4(0.5f), 
-		ui_textures->find("Watched Tooltip")->second
+		ui_textures->find("Watched Tooltip")->second,
+		false
 	);
-	overlay.elements["Kill Tooltip"].visible = false;
-	overlay.elements["Lure Tooltip"].visible = false;
-	overlay.elements["Dash Tooltip"].visible = false;
-	overlay.elements["Stalk Tooltip"].visible = false;
-	overlay.elements["Warning Tooltip"].visible = false;
-	overlay.elements["Watched Tooltip"].visible = false;
-	overlay.elements["Move Tooltip"].visible = true;
 }
 
 void PlayMode::trigger_game_over() {
@@ -946,8 +962,16 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				dash_timer = dash_duration;
 				dash_cooldown_timer = dash_cooldown;
 
-				// Optional: slight FOV punch-in while dashing
-				target_fovy = base_fovy * 2.1f;
+				// Optional: slight FOV punch-in/out depending on camera 
+				//	direction from move direction
+
+				glm::vec3 cam_forward_xy = cam->forward_xy;
+				glm::vec3 player_forward_xy = player->rotation * glm::vec3(0.f, 1.0f, 0.f);
+				player_forward_xy.z = 0.f;
+				player_forward_xy = glm::normalize(player_forward_xy);
+
+				float d = glm::dot(player_forward_xy, cam_forward_xy);
+				target_fovy = base_fovy * 2.1f - d * .9f; //2.1f is base
 			}
 			return true;
 		}else if (evt.key.key == SDLK_G) {
@@ -1047,63 +1071,54 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			if (execution_mode && execution_target) {
 				Sound::play(*attack_sample, 1.0f, 0.0f);
 
-				// Distance calculation
-				glm::vec3 player_pos = camera->transform->make_world_from_local()[3];
-				glm::vec3 civ_pos    = execution_target->make_world_from_local()[3];
+				// UPDATED execution target selection to
+				// choose closest within range, skipping dist here
 
-				float dist = glm::length(civ_pos - player_pos);
-				if (dist <= execution_range) {
-					// === EXECUTION SUCCESS ON CIVILIAN ===
-					Sound::play(*enemy_die_sample, 1.0f, 0.0f);
-					
-					execution_mode = false;
-					stalk_charge = 0.0f;
+				// === EXECUTION SUCCESS ON CIVILIAN ===
+				Sound::play(*enemy_die_sample, 1.0f, 0.0f);
+				
+				execution_mode = false;
+				stalk_charge = 0.0f;
 
-					++kill_count;
-					overlay.elements["Kill Tooltip"].visible = false;
-					
+				++kill_count;
+				overlay.elements["Kill Tooltip"].visible = false;
+				
 
-					blood_pg.burst_at(execution_target->position + glm::vec3(0.f, .5f, 0.f), 20);
+				blood_pg.burst_at(execution_target->position + glm::vec3(0.f, .5f, 0.f), 20);
 
-					// hide the civilian visually
-					execution_target->scale = glm::vec3(0.0f);
-					execution_target->position.z = -100.0f;
+				// hide the civilian visually
+				execution_target->scale = glm::vec3(0.0f);
+				execution_target->position.z = -100.0f;
 
-					// clear current target so we don't keep reusing it
-					execution_target = nullptr;
-					if (!dash_skill && kill_count >= 1) {
-						dash_skill = true;
-						dash_hint_active = true;
-						dash_hint_timer = 3.0f;   // show "PRESS SPACE TO DASH" for 3 seconds
-					}
-
-					// Unlock attraction sound on second kill (only once)
-					if (!attraction_ability && kill_count >= 2) {
-						attraction_ability = true;
-						sound_hint_active = true;
-						sound_hint_timer = 3.0f;  // show "PRESS G TO Make Attraction" for 3 seconds
-					}
-
-					if (!pass_hint_active && kill_count >= 5) {
-						pass_hint_active = true;
-						is_deer_human = true;
-						trigger_gate_open();
-					}
-
-
-					if (deer_stage == 0) {
-						final_deer->scale = glm::vec3(0.0f);  // hide original deer
-						final_deer_leg->scale = glm::vec3(0.7f);
-						deer_stage = 1;
-					}
-
-					return true;
+				// clear current target so we don't keep reusing it
+				execution_target = nullptr;
+				if (!dash_skill && kill_count >= 1) {
+					dash_skill = true;
+					dash_hint_active = true;
+					dash_hint_timer = 3.0f;   // show "PRESS SPACE TO DASH" for 3 seconds
 				}
-				else
-				{
-					// Not in distance
-					return true;
+
+				// Unlock attraction sound on second kill (only once)
+				if (!attraction_ability && kill_count >= 2) {
+					attraction_ability = true;
+					sound_hint_active = true;
+					sound_hint_timer = 3.0f;  // show "PRESS G TO Make Attraction" for 3 seconds
 				}
+
+				if (!pass_hint_active && kill_count >= 5) {
+					pass_hint_active = true;
+					is_deer_human = true;
+					trigger_gate_open();
+				}
+
+
+				if (deer_stage == 0) {
+					final_deer->scale = glm::vec3(0.0f);  // hide original deer
+					final_deer_leg->scale = glm::vec3(0.7f);
+					deer_stage = 1;
+				}
+
+				return true;
 			}
 		}
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP) {
@@ -1157,7 +1172,7 @@ void PlayMode::update(float elapsed) {
 		dash_timer -= elapsed;
 		if (dash_timer <= 0.0f) {
 			dashing = false;
-			target_fovy = base_fovy; // restore zoom after dash
+			target_fovy = base_fovy * 2.f; // restore zoom after dash
 		}
 	}
 	if (attraction_cooldown_timer > 0.0f) {
@@ -1317,18 +1332,9 @@ void PlayMode::update(float elapsed) {
 
 				dust_pg.set_spawn_rate(.1f);
 
-				// compute new player rotation relative to camera
-				glm::vec3 forward_xy = glm::vec3 (
-					std::sinf(cam->yaw), 
-					-std::cos(cam->yaw), 
-					0.f);
-				glm::vec3 right_xy = glm::vec3 (
-					forward_xy.y, 
-					-forward_xy.x, 
-					0.f);
-				
+				// compute new player rotation relative to camera				
 				glm::vec3 target_dir = -glm::normalize(
-					move.x * right_xy + move.y * forward_xy
+					move.x * cam->right_xy + move.y * cam->forward_xy
 				);
 
 				float target_yaw = std::atan2f(-target_dir.x, target_dir.y);
@@ -1374,30 +1380,53 @@ void PlayMode::update(float elapsed) {
 	// --- Enemy on-screen check (clip-space) ---
 	enemy_on_screen = false;
 	execution_target = nullptr;
+	stalk_target = nullptr;
 	if (!civilians.empty()) {
 		glm::mat4 clip_from_world =
 			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
 		// pick the first civilian that is on-screen, or tweak to pick the closest
+		float closest_stalk_dist = maximum_stalk_dist;
+		float closest_execute_dist = execution_range;
+		float x_cutoff = .5f; // player has to aim towards civ, weighted by distance
 		for (auto &civilian : civilians) {
 			// NOTE: adjust this line to however your Civilian stores its transform.
 			// e.g. if Civilian has `Scene::Transform *transform;`, this is correct:
 			Scene::Transform *t = civilian.transform;
 			if (!t) continue;
 
-			glm::vec3 c_world = t->make_world_from_local()[3];
-			glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.0f);
+			glm::vec3 c_world = t->make_world_from_local()[3] 
+				+ glm::vec3(0.f, 0.f, 1.25f); // offset from feet to chest
+			glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.f);
 			if (clip.w <= 0.0f) continue;
 
 			glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
 			bool on_screen =
 				(ndc.x >= -1.0f && ndc.x <= 1.0f &&
 				ndc.y >= -1.0f && ndc.y <= 1.0f);
+			
+			if (!on_screen) continue;
+			enemy_on_screen = true;       // reused flag name
+			
+			float enemy_dist = glm::distance(c_world, player->position);
+			float weight = enemy_dist / maximum_stalk_dist;
+			
+			// choosing stalking target
+			if (std::abs(ndc.x) <= x_cutoff * (1.f - weight * weight) && // farther civs must be in tighter fovx 
+				enemy_dist < closest_stalk_dist // but prioritze closest
+			) {
+				stalk_target = t;             // remember which civilian we’re aiming at
+				closest_stalk_dist = enemy_dist;
+				stalk_target_ndc.x = ndc.x;
+				stalk_target_ndc.y = ndc.y;
+			}
 
-			if (on_screen) {
-				enemy_on_screen = true;           // reused flag name
-				execution_target = t;             // remember which civilian we’re aiming at
-				break;                            // stop at the first on-screen civilian
+			// choose execution target
+			if (enemy_dist < closest_execute_dist) {
+				execution_target = t;
+				closest_execute_dist = enemy_dist;
+				execution_target_ndc.x = ndc.x;
+				execution_target_ndc.y = ndc.y;
 			}
 		}
 	}
@@ -1419,11 +1448,11 @@ void PlayMode::update(float elapsed) {
 		}
 
 		// force pitch and player model to look towards stalk direction
-		if (execution_target) {
-			glm::vec3 to_target = execution_target->position - player->position;
+		if (stalk_target) {
+			glm::vec3 to_target = stalk_target->position - player->position;
 			
 			float target_pitch_ratio = 1.f + .05f;
-			float target_pitch = (std::atan2f(to_target.z, std::sqrtf(to_target.x * to_target.x + to_target.y * to_target.y)) 
+			float target_pitch = (std::atan2f(-to_target.z, std::sqrtf(to_target.x * to_target.x + to_target.y * to_target.y)) 
 				+ cam->pitch_range.x / 2.f) * target_pitch_ratio;
 
 			// smooth force camera pitch by lerp
@@ -1789,14 +1818,20 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	// Re-enable color writes for later overlays:
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
+	
+	overlay.elements["Knife"].visible = execution_target && stalk_charge == 1.f;
+	if (execution_target) {
+		overlay.elements["Knife"].position.x = execution_target_ndc.x * drawable_size.x;
+		overlay.elements["Knife"].position.y = execution_target_ndc.y * drawable_size.y;
+	}
 	enemy_visible = false; // default
 
-	if (execution_target) {
+	if (stalk_target) {
 		glm::mat4 clip_from_world =
 			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
-		glm::vec3 c_world = execution_target->make_world_from_local()[3];
+		glm::vec3 c_world = stalk_target->make_world_from_local()[3]
+			+ glm::vec3(0.f, 0.f, 1.25f); // offset from feet to chest
 		glm::vec4 clip = clip_from_world * glm::vec4(c_world, 1.0f);
 
 		if (clip.w > 0.0f) {
@@ -1807,8 +1842,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 				ndc.y >= -1.0f && ndc.y <= 1.0f) {
 					enemy_visible = true;
 
-				// depth sampling logic stays the same, just using c_world / execution_target
-				// (copy your existing enemy-depth code and replace `enemy` with `execution_target`)
+				// depth sampling logic stays the same, just using c_world / stalk_target
+				// (copy your existing enemy-depth code and replace `enemy` with `stalk_target`)
 				// ...
 				// enemy_visible = !(depth_sample + eps < enemy_depth);
 			}
@@ -1816,11 +1851,12 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	}
 	
 	// draw aim indicator / outline on target civilian in focus mode
-	if (focus_mode && execution_target && enemy_visible) {
+	overlay.elements["Stalking Eye"].visible = focus_mode && stalk_target && enemy_visible && stalk_charge < 1.f;
+	/*if (focus_mode && stalk_target && enemy_visible) {
 		glm::mat4 clip_from_world =
 			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
-		glm::mat4x3 world_from_target = execution_target->make_world_from_local();
+		glm::mat4x3 world_from_target = stalk_target->make_world_from_local();
 		glm::vec3 c_world = world_from_target[3];           // translation column
 		glm::vec4 c_clip  = clip_from_world * glm::vec4(c_world, 1.0f);
 
@@ -1829,7 +1865,11 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			// ... existing draw_lines / crosshair overlay code, just driven by c_ndc instead of enemy
 		}
 	}
-	if (focus_mode && execution_target) {
+	*/
+	if (focus_mode && stalk_target) {
+		overlay.elements["Stalking Eye"].position.x = stalk_target_ndc.x * drawable_size.x;
+		overlay.elements["Stalking Eye"].position.y = stalk_target_ndc.y * drawable_size.y;
+	
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
 		DrawLines lines(glm::mat4(
