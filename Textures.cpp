@@ -166,7 +166,7 @@ const std::vector<NamedTexture> named_textures = {
     {"heroine_boots_1", "textures/heroine_boots_1.png"},
 };
 
-Load<std::vector<GLuint>> textures(LoadTagDefault, []() -> std::vector<GLuint> const *
+Load<std::vector<GLuint>> textures(LoadTagEarly, []() -> std::vector<GLuint> const *
                                    {
     auto ret = new std::vector<GLuint>();
     ret->reserve(named_textures.size());
@@ -189,9 +189,12 @@ const std::vector< NamedTexture > ui_named_textures = {
     {"Play Button", "textures/play_button.png"},
     {"Stalking Eye", "textures/stalking_eye.png"},
     {"Knife", "textures/knife.png"},
+    {"Title Words", "textures/title_words.png"},
+    {"Title Antlers", "textures/title_antlers.png"},
+    {"Title Person", "textures/title_person.png"},
 };
 
-Load<std::map<std::string, GLuint>> ui_textures(LoadTagDefault, []() -> std::map<std::string, GLuint> const * {
+Load<std::map<std::string, GLuint>> ui_textures(LoadTagEarly, []() -> std::map<std::string, GLuint> const * {
     auto ret = new std::map<std::string, GLuint>();
     for (auto const &nt : ui_named_textures) {
         ret->insert({nt.prefix, Texture::load_from_png(data_path(nt.filename))});

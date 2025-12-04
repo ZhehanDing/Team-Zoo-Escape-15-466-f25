@@ -16,11 +16,10 @@
 
 #include "BasicMaterialDeferredProgram.hpp"
 #include "CopyToScreenProgram.hpp"
-
-/* if want 3D background, can make scene and use the follow. just make sure to move overlay.draw() functionality
+#include "check_fb.hpp"
 
 GLuint menu_for_basic_material_deferred_object = 0;
-GLuint light_for_basic_material_deferred_light = 0;
+GLuint menu_light_for_basic_material_deferred_light = 0;
 Load< MeshBuffer > menu_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("zoo_nolink.pnct"));
 	menu_for_basic_material_deferred_object = ret->make_vao_for_program(basic_material_deferred_object_program->program);
@@ -28,10 +27,9 @@ Load< MeshBuffer > menu_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 });
 
 Load< Scene > menu_scene_deferred(LoadTagDefault, []() -> Scene const * {
-	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
-	menu_for_basic_material_deferred_object = menu_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
+	menu_light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
 
-	Scene *ret = new Scene(data_path("zoo_nolink.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+	Scene *ret = new Scene(data_path("main_menu.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
 		Mesh const &mesh = menu_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
@@ -54,7 +52,7 @@ Load< Scene > menu_scene_deferred(LoadTagDefault, []() -> Scene const * {
 		for (size_t i = 0; i < named_textures.size(); ++i)
 		{
 			// printf("Checking prefix: %s\n", named_textures[i].prefix.c_str());
-			if (transform->name.rfind(named_textures[i].prefix, 0) == 0)
+			if (transform->name.rfind(named_textures[i].prefix, 0) != std::string::npos)
 			{
 				if (i < textures->size())
 				{
@@ -73,13 +71,10 @@ Load< Scene > menu_scene_deferred(LoadTagDefault, []() -> Scene const * {
 			glUniform1i(basic_material_deferred_object_program->SKY_MODE_int,
 						is_sky ? 1 : 0);
 		};
-		});
+	});
 
-		return ret; });
-
-
-#include "check_fb.hpp"
-#include "CopyToScreenProgram.hpp"
+	return ret; 
+});
 
 // Helper: maintain a framebuffer to hold rendered geometry
 struct FB {
@@ -162,7 +157,60 @@ struct FB {
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		}
 	}
-} fb;
+} menu_fb;
+
+MainMenuMode::MainMenuMode() : scene(*menu_scene_deferred) {
+	overlay.add_element("Antlers", 
+		glm::vec2(0.f, 400.f), 
+		glm::vec2(1321.f, 334.f) * .625f,
+		glm::vec4(.09f, .02f, 0.f, 1.f),
+		ui_textures->find("Title Antlers")->second
+	);
+	overlay.add_element("Person", 
+		glm::vec2(0.f, 400.f), 
+		glm::vec2(1321.f, 334.f) * .625f,
+		glm::vec4(.2f, 0.f, 0.f, 1.f),
+		ui_textures->find("Title Person")->second
+	);
+	overlay.add_element("Title", 
+		glm::vec2(0.f, 400.f), 
+		glm::vec2(1321.f, 334.f) * .625f,
+		glm::vec4(1.f),
+		ui_textures->find("Title Words")->second
+	);
+    overlay.add_element("Play Button", 
+		glm::vec2(0.f, -100.f), 
+		glm::vec2(896.f, 384.f) * .25f, 
+		glm::vec4(1.f), 
+		ui_textures->find("Play Button")->second
+	);
+    overlay.add_interaction("Play Button", []() -> void { 
+        Mode::set_current(std::make_shared< PlayMode >());
+    });
+
+	// get pointer to camera for convenience:
+	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
+	camera = &scene.cameras.front();
+}
+
+MainMenuMode::~MainMenuMode() {
+}
+
+bool MainMenuMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
+    if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        if (evt.button.button == SDL_BUTTON_LEFT){
+			int w, h;
+            SDL_GetWindowSizeInPixels(Mode::window, &w, &h);
+            float mouse_x = evt.button.x * w / window_size.x;
+            float mouse_y = (window_size.y - evt.button.y) * h / window_size.y;
+			overlay.handle_click(glm::uvec2(mouse_x, mouse_y));
+        }
+    }
+    return false;
+}
+
+void MainMenuMode::update(float elapsed) {
+}
 
 void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
 	//11/23 Update
@@ -172,9 +220,9 @@ void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
 	glm::vec3 eye = camera->transform->make_world_from_local()[3];
 
 	//--- draw geometry to framebuffer ---
-	fb.resize(drawable_size);
+	menu_fb.resize(drawable_size);
 
-	glBindFramebuffer(GL_FRAMEBUFFER, fb.objects_fb); // bind the objects (G-buffer) framebuffer as render target
+	glBindFramebuffer(GL_FRAMEBUFFER, menu_fb.objects_fb); // bind the objects (G-buffer) framebuffer as render target
 
 	GLfloat zeros[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // helper clear color (all channels = 0)
 	glClearBufferfv(GL_COLOR, 0, zeros); // clear color attachment 0 (position texture) to zeros
@@ -195,7 +243,7 @@ void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
 
 	//--- draw lights, reading geometry from framebuffer ---
 
-	glBindFramebuffer(GL_FRAMEBUFFER, fb.lights_fb); // bind lights framebuffer (output accumulation texture)
+	glBindFramebuffer(GL_FRAMEBUFFER, menu_fb.lights_fb); // bind lights framebuffer (output accumulation texture)
 
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // set clear color for lights pass (transparent black)
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear both color and depth on lights framebuffer
@@ -214,14 +262,14 @@ void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
 	auto &prog = basic_material_deferred_light_program; // reference to the deferred-light shader wrapper
 	glUseProgram(prog->program); // bind the deferred-light shader program
 
-	glBindVertexArray(light_for_basic_material_deferred_light); // bind VAO containing the light-volume geometry
+	glBindVertexArray(menu_light_for_basic_material_deferred_light); // bind VAO containing the light-volume geometry
 
 	glActiveTexture(GL_TEXTURE0); // select texture unit 0
-	glBindTexture(GL_TEXTURE_2D, fb.position_tex); // bind world-space position G-buffer to unit 0
+	glBindTexture(GL_TEXTURE_2D, menu_fb.position_tex); // bind world-space position G-buffer to unit 0
 	glActiveTexture(GL_TEXTURE1); // select texture unit 1
-	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex); // bind normal+roughness G-buffer to unit 1
+	glBindTexture(GL_TEXTURE_2D, menu_fb.normal_roughness_tex); // bind normal+roughness G-buffer to unit 1
 	glActiveTexture(GL_TEXTURE2); // select texture unit 2
-	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex); // bind albedo (color) G-buffer to unit 2
+	glBindTexture(GL_TEXTURE_2D, menu_fb.albedo_tex); // bind albedo (color) G-buffer to unit 2
 
 	for (auto const &light : scene.lights) { // iterate over all lights in the scene
 		glm::mat4 light_to_world = light.transform->make_world_from_local(); // compute light's model-to-world transform
@@ -319,16 +367,16 @@ void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
 	glUseProgram(copy_to_screen_program->program);  // Use the program that copies textures to screen
 
 	glActiveTexture(GL_TEXTURE0);           // Activate the first texture unit
-	glBindTexture(GL_TEXTURE_2D, fb.output_tex);  // Show final lighting result
+	glBindTexture(GL_TEXTURE_2D, menu_fb.output_tex);  // Show final lighting result
 
 	// if (show == ShowOutput) {
-	// 	glBindTexture(GL_TEXTURE_2D, fb.output_tex);  // Show final lighting result
+	// 	glBindTexture(GL_TEXTURE_2D, menu_fb.output_tex);  // Show final lighting result
 	// } else if (show == ShowPosition) {
-	// 	glBindTexture(GL_TEXTURE_2D, fb.position_tex);  // Show world-space positions
+	// 	glBindTexture(GL_TEXTURE_2D, menu_fb.position_tex);  // Show world-space positions
 	// } else if (show == ShowNormalRoughness) {
-	// 	glBindTexture(GL_TEXTURE_2D, fb.normal_roughness_tex);  // Show normals and roughness
+	// 	glBindTexture(GL_TEXTURE_2D, menu_fb.normal_roughness_tex);  // Show normals and roughness
 	// } else if (show == ShowAlbedo) {
-	// 	glBindTexture(GL_TEXTURE_2D, fb.albedo_tex);  // Show surface colors and textures
+	// 	glBindTexture(GL_TEXTURE_2D, menu_fb.albedo_tex);  // Show surface colors and textures
 	// }
 
 	GL_ERRORS();
@@ -349,39 +397,6 @@ void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	GL_ERRORS();
-}
-*/
-
-MainMenuMode::MainMenuMode() {
-    overlay.add_element("Play Button", glm::vec2(0.f), glm::vec2(896.f, 384.f) * .5f, glm::vec4(1.f), ui_textures->find("Play Button")->second);
-    overlay.add_interaction("Play Button", []() -> void { 
-        Mode::set_current(std::make_shared< PlayMode >());
-    });
-}
-
-MainMenuMode::~MainMenuMode() {
-}
-
-bool MainMenuMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
-    if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-        if (evt.button.button == SDL_BUTTON_LEFT){
-			int w, h;
-            SDL_GetWindowSizeInPixels(Mode::window, &w, &h);
-            float mouse_x = evt.button.x * w / window_size.x;
-            float mouse_y = (window_size.y - evt.button.y) * h / window_size.y;
-			overlay.handle_click(glm::uvec2(mouse_x, mouse_y));
-        }
-    }
-    return false;
-}
-
-void MainMenuMode::update(float elapsed) {
-}
-
-void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
-    glClear(GL_COLOR_BUFFER_BIT);
-
     overlay.resize(drawable_size);
     overlay.draw();
 
@@ -396,5 +411,5 @@ void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
     glBindVertexArray(0);
     glUseProgram(0);
     
-    GL_ERRORS();
+	GL_ERRORS();
 }
