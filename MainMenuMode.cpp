@@ -161,25 +161,25 @@ struct FB {
 
 MainMenuMode::MainMenuMode() : scene(*menu_scene_deferred) {
 	overlay.add_element("Antlers", 
-		glm::vec2(0.f, 400.f), 
+		glm::vec2(0.f, 200.f), 
 		glm::vec2(1321.f, 334.f) * .625f,
 		glm::vec4(.09f, .02f, 0.f, 1.f),
 		ui_textures->find("Title Antlers")->second
 	);
 	overlay.add_element("Person", 
-		glm::vec2(0.f, 400.f), 
+		glm::vec2(0.f, 200.f), 
 		glm::vec2(1321.f, 334.f) * .625f,
 		glm::vec4(.2f, 0.f, 0.f, 1.f),
 		ui_textures->find("Title Person")->second
 	);
 	overlay.add_element("Title", 
-		glm::vec2(0.f, 400.f), 
+		glm::vec2(0.f, 200.f), 
 		glm::vec2(1321.f, 334.f) * .625f,
 		glm::vec4(1.f),
 		ui_textures->find("Title Words")->second
 	);
     overlay.add_element("Play Button", 
-		glm::vec2(0.f, -100.f), 
+		glm::vec2(0.f, -50.f), 
 		glm::vec2(896.f, 384.f) * .25f, 
 		glm::vec4(1.f), 
 		ui_textures->find("Play Button")->second
@@ -199,10 +199,8 @@ MainMenuMode::~MainMenuMode() {
 bool MainMenuMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
     if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         if (evt.button.button == SDL_BUTTON_LEFT){
-			int w, h;
-            SDL_GetWindowSizeInPixels(Mode::window, &w, &h);
-            float mouse_x = evt.button.x * w / window_size.x;
-            float mouse_y = (window_size.y - evt.button.y) * h / window_size.y;
+            float mouse_x = evt.button.x;
+            float mouse_y = (window_size.y - evt.button.y);
 			overlay.handle_click(glm::uvec2(mouse_x, mouse_y));
         }
     }

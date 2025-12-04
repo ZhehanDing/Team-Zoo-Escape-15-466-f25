@@ -742,7 +742,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	);
 	overlay.add_element(
 		"Stalk Tooltip", 
-		glm::vec2(350.f, -100.f), 
+		glm::vec2(175.f, -50.f), 
 		glm::vec2(896.f, 384.f) * .125f, 
 		glm::vec4(0.7f), 
 		ui_textures->find("Stalk Tooltip")->second,
@@ -750,7 +750,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	);
 	overlay.add_element(
 		"Kill Tooltip", 
-		glm::vec2(350.f, -100.f), 
+		glm::vec2(175.f, -50.f), 
 		glm::vec2(668.f, 367.f) * .125f, 
 		glm::vec4(0.7f), 
 		ui_textures->find("Kill Tooltip")->second,
@@ -758,7 +758,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	);
 	overlay.add_element(
 		"Lure Tooltip", 
-		glm::vec2(00.f, 0.f),  // offset
+		glm::vec2(0.f, 0.f),  // offset
 		glm::vec2(1890.f, 636.f) * .125f,  // scale
 		glm::vec4(0.7f),  // color
 		ui_textures->find("Lure Tooltip")->second,
@@ -774,7 +774,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	);
 	overlay.add_element(
 		"Move Tooltip", 
-		glm::vec2(350.f, -100.f), 
+		glm::vec2(175.f, -50.f), 
 		glm::vec2(1796.f, 542.f) * .125f, 
 		glm::vec4(0.7f), 
 		ui_textures->find("Move Tooltip")->second,
@@ -782,7 +782,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	);
 	overlay.add_element(
 		"Warning Tooltip", 
-		glm::vec2(0.f, 850.f),
+		glm::vec2(0.f, 212.5f),
 		glm::vec2(465.f, 465.f) * .3f, 
 		glm::vec4(1.f), 
 		ui_textures->find("Warning Tooltip")->second,
@@ -790,7 +790,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	);
 	overlay.add_element(
 		"Watched Tooltip", 
-		glm::vec2(0.f, 600.f),
+		glm::vec2(0.f, 150.f),
 		glm::vec2(2030.f, 445.f) * .25f, 
 		glm::vec4(0.5f), 
 		ui_textures->find("Watched Tooltip")->second,
@@ -1551,12 +1551,13 @@ void PlayMode::update(float elapsed) {
 
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
+	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
+	glViewport(0, 0, drawable_size.x, drawable_size.y);
 	//11/23 Update
 	// --- GAME OVER SCREEN: clear everything and only draw text ---
 	if (game_over) {
 		// draw straight to default framebuffer
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glViewport(0, 0, drawable_size.x, drawable_size.y);
 
 		// clear color + depth so nothing from the scene remains
 		glDisable(GL_DEPTH_TEST);
@@ -1598,7 +1599,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	}
 	//11/23 Update
 	//update camera aspect ratio for drawable:
-	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
 	glm::mat4 world_to_clip = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 	glm::vec3 eye = camera->transform->make_world_from_local()[3];
 
@@ -1819,10 +1819,14 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	// Re-enable color writes for later overlays:
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	
+    constexpr float orig_aspect = 1280.f / 720.f;
+	float inv_scale = (camera->aspect > orig_aspect) ?  720.f / drawable_size.y : 1280.f / drawable_size.x;
 	overlay.elements["Knife"].visible = execution_target && stalk_charge == 1.f;
+	
+	glm::vec2 knife_orig_size = overlay.elements["Knife"].size;
 	if (execution_target) {
-		overlay.elements["Knife"].position.x = execution_target_ndc.x * drawable_size.x;
-		overlay.elements["Knife"].position.y = execution_target_ndc.y * drawable_size.y;
+		overlay.elements["Knife"].position = execution_target_ndc * glm::vec2(drawable_size) * inv_scale * .5f;
+		overlay.elements["Knife"].size *= inv_scale;
 	}
 	enemy_visible = false; // default
 
@@ -1866,9 +1870,10 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		}
 	}
 	*/
+	glm::vec2 eye_orig_size = overlay.elements["Stalking Eye"].size;
 	if (focus_mode && stalk_target) {
-		overlay.elements["Stalking Eye"].position.x = stalk_target_ndc.x * drawable_size.x;
-		overlay.elements["Stalking Eye"].position.y = stalk_target_ndc.y * drawable_size.y;
+		overlay.elements["Stalking Eye"].position = stalk_target_ndc * glm::vec2(drawable_size) * inv_scale * .5f;
+		overlay.elements["Stalking Eye"].size *= inv_scale;
 	
 		glDisable(GL_DEPTH_TEST);
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
@@ -2098,6 +2103,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		glBindTexture(GL_TEXTURE_2D, 0);
 		glBindVertexArray(0);
 		glUseProgram(0);
+
+		overlay.elements["Knife"].size = knife_orig_size;
+		overlay.elements["Stalking Eye"].size = eye_orig_size;
 		
 		GL_ERRORS();
 	}

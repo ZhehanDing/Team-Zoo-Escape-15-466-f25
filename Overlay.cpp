@@ -23,20 +23,20 @@ OverlayProgram::OverlayProgram() {
         "out vec2 texCoord;\n"
         "void main() {\n"
             "const vec2 corners[4] = vec2[](\n" // avoid vao
-                "vec2(-1.0, -1.0),\n"
-                "vec2(1.0, -1.0),\n"
-                "vec2(-1.0, 1.0),\n"
-                "vec2(1.0, 1.0)\n"
+                "vec2(-.5, -.5),\n"
+                "vec2(.5, -.5),\n"
+                "vec2(-.5, .5),\n"
+                "vec2(.5, .5)\n"
             ");\n"
             "float aspect = SCREEN_SIZE.x / SCREEN_SIZE.y;\n"
             "float orig_aspect = ORIG_SCREEN_SIZE.x / ORIG_SCREEN_SIZE.y;\n"
             "float scale = (aspect > orig_aspect) ?\n"
                 "SCREEN_SIZE.y / ORIG_SCREEN_SIZE.y :\n"
                 "SCREEN_SIZE.x / ORIG_SCREEN_SIZE.x;\n"
-            "vec2 ndc = (POSITION + corners[gl_VertexID] * SIZE * scale) / SCREEN_SIZE;\n"
+            "vec2 ndc = (POSITION + corners[gl_VertexID] * SIZE) * scale / SCREEN_SIZE * 2.0;\n"
             "gl_Position = vec4(ndc, 0.0, 1.0);\n"
             "color = COLOR;\n"
-            "texCoord = corners[gl_VertexID] * 0.5 + 0.5;\n"
+            "texCoord = corners[gl_VertexID] + 0.5;\n"
         "}\n"
     ,
         "#version 330\n"
@@ -73,11 +73,8 @@ OverlayProgram::~OverlayProgram() {
 }
 
 Overlay::Overlay() {
-    // set initial screen size
-    GLint viewport[4]; 
-    glGetIntegerv(GL_VIEWPORT, &viewport[0]);
-
-    initial_size = glm::uvec2(viewport[2], viewport[3]);
+    // set reference screen size
+    initial_size = glm::vec2(1280.f, 720.f);
 
     glUseProgram(overlay_program->program);
     glUniform2fv(overlay_program->SCREEN_SIZE_vec2, 1,
@@ -188,8 +185,8 @@ void Overlay::handle_click(glm::uvec2 click_position) {
 
     for (auto p : interactions) {
         Element &e = p.second.element;
-        if (glm::abs((float)click_position.x - e.position.x - (float)size.x * .5f) <= e.size.x * .5f * scale &&
-            glm::abs((float)click_position.y - e.position.y - (float)size.y * .5f) <= e.size.y * .5f * scale
+        if (glm::abs((float)click_position.x - e.position.x * scale - (float)size.x * .5f) <= e.size.x * .5f * scale &&
+            glm::abs((float)click_position.y - e.position.y * scale - (float)size.y * .5f) <= e.size.y * .5f * scale
         ) {
             p.second.action();
         }
