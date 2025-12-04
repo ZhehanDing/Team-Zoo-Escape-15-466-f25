@@ -37,3 +37,13 @@ bool check_collision(
     const glm::vec3 &posA, const glm::vec3 &halfA,
     const glm::vec3 &posB, const glm::vec3 &halfB
 );
+
+#include "Mesh.hpp"
+struct BBox {
+    Mesh const &mesh;
+    Scene::Transform *transform;
+
+    BBox(Mesh const &mesh, Scene::Transform *transform) : mesh(mesh), transform(transform) {
+        assert(transform);
+    };
+};

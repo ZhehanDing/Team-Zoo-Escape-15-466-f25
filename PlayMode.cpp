@@ -30,6 +30,7 @@
 
 #include <random>
 #include <map>
+#include <set>
 #include <functional>
 #include <memory>
 
@@ -105,6 +106,22 @@ Load< std::vector< Sound::Sample > > footstep_sounds(LoadTagDefault, []() -> std
     return ret;
 });
 
+// bboxes for camera dist cropping -- approx, dont care about rotation
+std::vector< BBox > bboxes;
+std::set< std::string > skip_bbox = { 
+	"Tyriese_Miller_C_Deer_Idle:body.002", 
+	"Tyriese_Miller_C_Deer_Idle:body.006", 
+	"Tyriese_Miller_C_Deer_Idle:polySurface17.001", 
+	"Tyriese_Miller_C_Deer_Idle:polySurface17.002", 
+	"Tyriese_Miller_C_Deer_Idle:polySurface17.006", 
+	"Tyriese_Miller_C_Deer_Idle:polySurface17.007", 
+	"Tyriese_Miller_C_Deer_Idle:polySurface18.001", 
+	"Tyriese_Miller_C_Deer_Idle:polySurface18.002", 
+	"Tyriese_Miller_C_Deer_Idle:polySurface18.006", 
+	"Tyriese_Miller_C_Deer_Idle:polySurface18.007", 
+	"HG_Baggy_Jeans.003 Leg", 
+	"HG_Suede_Sneakers_Male.003" 
+};
 Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 	light_for_basic_material_deferred_light = light_meshes->make_vao_for_program(basic_material_deferred_light_program->program);
 	zoo_for_basic_material_deferred_object = zoo_meshes->make_vao_for_program(basic_material_deferred_object_program->program);
@@ -151,9 +168,14 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 			glUniform1i(basic_material_deferred_object_program->SKY_MODE_int,
 						is_sky ? 1 : 0);
 		};
-		});
 
-		return ret; });
+		if (!is_sky && skip_bbox.find(transform->name) == skip_bbox.end()) {
+			bboxes.emplace_back(BBox(mesh, transform));
+		}
+	});
+
+	return ret; 
+});
 
 // Helper: maintain a framebuffer to hold rendered geometry
 struct FB {
@@ -1102,7 +1124,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			glm::vec2 motion = glm::vec2(evt.motion.xrel / float(window_size.y),
 										 -evt.motion.yrel / float(window_size.y));
 
-			cam->update_camera(motion * camera->fovy);
+			cam->update_camera(motion * camera->fovy, &bboxes);
 			return true;
 		}
 	}
@@ -1346,7 +1368,7 @@ void PlayMode::update(float elapsed) {
 		{
 			player->position = new_pos;
 		}
-		cam->update_camera(glm::vec2(0.f));
+		cam->update_camera(glm::vec2(0.f), &bboxes);
 	}
 
 	// --- Enemy on-screen check (clip-space) ---
