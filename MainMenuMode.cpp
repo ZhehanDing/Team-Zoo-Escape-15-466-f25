@@ -389,8 +389,8 @@ void MainMenuMode::draw(glm::uvec2 const &drawable_size) {
 	glBindVertexArray(0);                   // Unbind VAO
 	glUseProgram(0);                        // Unbind shader program
 
-	glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
-	glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
+	// glm::mat4 clip_from_world = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
+	// glm::mat4x3 light_from_world = glm::mat4x3(1.0f);
 
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);

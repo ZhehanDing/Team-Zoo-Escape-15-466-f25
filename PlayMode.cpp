@@ -746,7 +746,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		glm::vec2(896.f, 384.f) * .125f, 
 		glm::vec4(0.7f), 
 		ui_textures->find("Stalk Tooltip")->second,
-		true
+		false
 	);
 	overlay.add_element(
 		"Kill Tooltip", 
@@ -1124,7 +1124,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_UP) {
 		if (evt.button.button == SDL_BUTTON_RIGHT) {
 			// Toggle OFF:
-			if (stalk_charge < 1 && !overlay.start_show_stalk && kill_count < 1) {
+			if (stalk_charge < 1 && !overlay.start_show_stalk && kill_count < 1
+				&& !overlay.elements["Move Tooltip"].visible) {
 				overlay.elements["Stalk Tooltip"].visible = true;
 			}
 			focus_mode = false;
