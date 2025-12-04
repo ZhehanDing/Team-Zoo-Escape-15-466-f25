@@ -725,6 +725,14 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	dust_pg.transform.parent = player;
 
 	overlay.add_element(
+		"Watching Indicator", 
+		glm::vec2(0.f, 0.f),
+		glm::vec2(512.f, 512.f) * .1f, 
+		glm::vec4(.4f, 0.f, 0.f, .8f), 
+		ui_textures->find("Watching Indicator")->second,
+		false
+	);
+	overlay.add_element(
 		"Stalking Eye",
 		glm::vec2(0.f),
 		glm::vec2(512.f, 512.f) * .125f,
@@ -782,7 +790,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	);
 	overlay.add_element(
 		"Warning Tooltip", 
-		glm::vec2(0.f, 212.5f),
+		glm::vec2(0.f, 262.5f),
 		glm::vec2(465.f, 465.f) * .3f, 
 		glm::vec4(1.f), 
 		ui_textures->find("Warning Tooltip")->second,
@@ -1378,13 +1386,13 @@ void PlayMode::update(float elapsed) {
 		cam->update_camera(glm::vec2(0.f), &bboxes);
 	}
 
+	glm::mat4 clip_from_world =
+		camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 	// --- Enemy on-screen check (clip-space) ---
 	enemy_on_screen = false;
 	execution_target = nullptr;
 	stalk_target = nullptr;
 	if (!civilians.empty()) {
-		glm::mat4 clip_from_world =
-			camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
 
 		// pick the first civilian that is on-screen, or tweak to pick the closest
 		float closest_stalk_dist = maximum_stalk_dist;
@@ -1499,6 +1507,21 @@ void PlayMode::update(float elapsed) {
 				being_watched = true;
 				watching_civilian = &civ;     // remember this civilian
 				civ.watching_player = true;   // put them in watch mode (no movement)
+
+				glm::vec3 head_world = civ.transform->make_world_from_local()[3] 
+					+ glm::vec3(0.f, 0.f, 2.2f); // offset from feet to head
+				glm::vec4 clip = clip_from_world * glm::vec4(head_world, 1.f);
+				if (clip.w <= 0.0f) {
+					watching_on_screen = false;
+					break;
+				}
+
+				glm::vec3 ndc = glm::vec3(clip) / clip.w; // [-1,1]
+				watching_on_screen =
+					(ndc.x >= -1.0f && ndc.x <= 1.0f &&
+					ndc.y >= -1.0f && ndc.y <= 1.0f);
+				
+				watching_civ_ndc = glm::vec2(ndc.x, ndc.y);
 				break; // any one civilian is enough
 			}
 		}
@@ -1939,6 +1962,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 		glEnable(GL_DEPTH_TEST);
 	}
+
+	overlay.elements["Watching Indicator"].visible = watching_civilian && watching_on_screen;
+	glm::vec2 watching_orig_size = overlay.elements["Watching Indicator"].size;
+	if (watching_civilian && watching_on_screen) {
+		overlay.elements["Watching Indicator"].position = watching_civ_ndc * glm::vec2(drawable_size) * inv_scale * .5f;
+		overlay.elements["Watching Indicator"].size *= inv_scale;
+	}
 	
 	//11/23 update Game over logic 
 	/*
@@ -2107,6 +2137,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 		overlay.elements["Knife"].size = knife_orig_size;
 		overlay.elements["Stalking Eye"].size = eye_orig_size;
+		overlay.elements["Watching Indicator"].size = watching_orig_size;
 		
 		GL_ERRORS();
 	}

@@ -117,6 +117,8 @@ struct PlayMode : Mode {
 	// Enemy vision
 	bool being_watched = false; // updated in update(), read in draw()
 	Civilian *watching_civilian = nullptr;
+	bool watching_on_screen = false;
+	glm::vec2 watching_civ_ndc;
 	bool watched_latched = false;
 	float enemy_view_distance = 10.0f; // max detection range (units)
 	float enemy_fov_deg = 70.0f;	   // vision cone (full angle)
