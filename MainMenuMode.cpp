@@ -199,8 +199,10 @@ MainMenuMode::~MainMenuMode() {
 bool MainMenuMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
     if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         if (evt.button.button == SDL_BUTTON_LEFT){
-            float mouse_x = evt.button.x;
-            float mouse_y = (window_size.y - evt.button.y);
+			int w, h;
+            SDL_GetWindowSizeInPixels(Mode::window, &w, &h);
+            float mouse_x = evt.button.x * w / window_size.x;
+            float mouse_y = (window_size.y - evt.button.y) * h / window_size.y;
 			overlay.handle_click(glm::uvec2(mouse_x, mouse_y));
         }
     }
