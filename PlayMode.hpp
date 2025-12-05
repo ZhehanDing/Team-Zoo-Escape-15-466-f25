@@ -188,5 +188,5 @@ struct PlayMode : Mode {
 	float sound_hint_timer = 0.0f;   // seconds
 	float watched_tooltip_timer = 0.0f;   // seconds, for pulsing effect
 	bool pass_hint_active =false;
-	float pass_hint_timer = 200.0f;
+	float pass_hint_timer = 5.0f;
 };

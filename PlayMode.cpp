@@ -811,6 +811,14 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		ui_textures->find("Watched Tooltip")->second,
 		false
 	);
+	overlay.add_element(
+		"Gate Open", 
+		glm::vec2(0.f, 0.f),
+		glm::vec2(1850.f, 200.f), 
+		glm::vec4(1.f), 
+		ui_textures->find("Gate Open")->second,
+		false
+	);
 }
 
 void PlayMode::trigger_game_over() {
@@ -2068,6 +2076,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			overlay.elements["Lure Tooltip"].color = glm::vec4(1.f);
 		}
 
+		overlay.elements["Gate Open"].visible = pass_hint_active;
 		if (pass_hint_active) {
 			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
 
@@ -2077,18 +2086,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			// ---- BIG text scale ----
 			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
 			float pulse     = 0.5f + 0.5f * std::cos(pass_hint_timer * 4.0f);
-			float size      = 0.1f * (0.8f + 0.4f * pulse);
-			glm::vec3 x_dir = glm::vec3(size, 0.0f, 0.0f);   // width
-			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
-
-			lines.draw_text(
-				"Gate is opened! Time to Run Away!",
-				anchor,
-				x_dir,
-				y_dir,
-				hint_color,
-				nullptr
-				); // color
+			float scale      = 0.3f * (0.8f + 0.4f * pulse);
+			glm::vec2 original_size = glm::vec2(1850.f, 200.f);
+			overlay.elements["Gate Open"].size = original_size * scale;
 		}
 	
 		if (game_success)
