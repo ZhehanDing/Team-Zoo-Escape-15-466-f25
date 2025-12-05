@@ -4,7 +4,7 @@
 //Modes:
 #include "GP25IntroMode.hpp"
 #include "MainMenuMode.hpp"
-// #include "PlayMode.hpp" Called by MainMenuMode
+#include "PlayMode.hpp"
 
 //For asset loading:
 #include "Load.hpp"
@@ -117,9 +117,12 @@ int main(int argc, char **argv) {
 	call_load_functions();
 
 	//------------ create game mode + make current --------------
-	Mode::set_current(std::make_shared< GP25IntroMode >([]() {
-		Mode::set_current(std::make_shared< MainMenuMode >());
-	}));
+	// Mode::set_current(std::make_shared< GP25IntroMode >([]() {
+	// 	Mode::set_current(std::make_shared< MainMenuMode >());
+	// }));
+
+	Mode::set_current(std::make_shared< PlayMode >());
+
 
 	//------------ main loop ------------
 
