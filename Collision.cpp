@@ -16,8 +16,8 @@ namespace {
     const glm::vec3 PLAYER_HALF            = glm::vec3(1.0f, 1.0f, 1.0f);
     const glm::vec3 GATE_HALF              = glm::vec3(2.0f, 9.0f, 3.0f);
     const glm::vec3 DEER_FENCE_HALF        = glm::vec3(34.0f, 39.0f, 3.0f);
-    const glm::vec3 ZOO_FENCE_NEAR_HALF    = glm::vec3(60.0f, 60.0f, 3.0f);
-    const glm::vec3 ZOO_FENCE_FAR_HALF    = glm::vec3(60.0f, 49.0f, 3.0f);
+    const glm::vec3 ZOO_FENCE_NEAR_HALF    = glm::vec3(58.0f, 60.0f, 3.0f);
+    const glm::vec3 ZOO_FENCE_FAR_HALF    = glm::vec3(58.0f, 49.0f, 3.0f);
 }
 
 namespace { // bounds for the playable area

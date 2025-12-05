@@ -15,6 +15,7 @@ struct CollisionHits {
     bool any() const {
         // printf("CollisionHits: out_of_bounds=%d, gate=%d, deer_fence=%d, zoo_fence_near=%d, zoo_fence_far=%d\n",
         //        out_of_bounds, gate, deer_fence, zoo_fence_near, zoo_fence_far);
+        // return false;
         return out_of_bounds || gate || deer_fence || zoo_fence_near || zoo_fence_far;
     }
 
