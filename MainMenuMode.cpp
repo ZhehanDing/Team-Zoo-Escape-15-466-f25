@@ -104,27 +104,15 @@ struct FB {
 } menu_fb;
 
 MainMenuMode::MainMenuMode() : scene(*menu_scene_deferred) {
-	overlay.add_element("Antlers", 
-		glm::vec2(0.f, 200.f), 
-		glm::vec2(1321.f, 334.f) * .625f,
-		glm::vec4(.09f, .02f, 0.f, 1.f),
-		ui_textures->find("Title Antlers")->second
-	);
-	overlay.add_element("Person", 
-		glm::vec2(0.f, 200.f), 
-		glm::vec2(1321.f, 334.f) * .625f,
-		glm::vec4(.2f, 0.f, 0.f, 1.f),
-		ui_textures->find("Title Person")->second
-	);
 	overlay.add_element("Title", 
-		glm::vec2(0.f, 200.f), 
-		glm::vec2(1321.f, 334.f) * .625f,
+		glm::vec2(0.f, 125.f), 
+		glm::vec2(1500.f, 1000.f) * .5f,
 		glm::vec4(1.f),
 		ui_textures->find("Title Words")->second
 	);
     overlay.add_element("Play Button", 
-		glm::vec2(0.f, -50.f), 
-		glm::vec2(775.f, 325.f) * .25f, 
+		glm::vec2(0.f, -140.f), 
+		glm::vec2(625.f, 350.f) * .3f, 
 		glm::vec4(1.f), 
 		ui_textures->find("Play Button")->second
 	);

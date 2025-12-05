@@ -190,8 +190,6 @@ const std::vector< NamedTexture > ui_named_textures = {
     {"Knife", "textures/knife.png"},
     {"Watching Indicator", "textures/exclamation.png"},
     {"Title Words", "textures/title_words.png"},
-    {"Title Antlers", "textures/title_antlers.png"},
-    {"Title Person", "textures/title_person.png"},
     {"Gate Open", "textures/gate_open_text.png"},
     {"Game Over", "textures/game_over_words.png"},
     {"Win", "textures/win_words.png"},

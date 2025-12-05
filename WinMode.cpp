@@ -106,14 +106,14 @@ struct FB {
 WinMode::WinMode() : scene(*menu_scene_deferred) {
 	SDL_SetWindowRelativeMouseMode(Mode::window, false);
 	overlay.add_element("Title", 
-		glm::vec2(0.f, 175.f), 
-		glm::vec2(1525.f, 500.f) * .5f,
+		glm::vec2(0.f, 125.f), 
+		glm::vec2(1920.f, 750.f) * .5f,
 		glm::vec4(1.f),
 		ui_textures->find("Win")->second
 	);
     overlay.add_element("Play Again Button", 
-		glm::vec2(0.f, -50.f), 
-		glm::vec2(1775.f, 325.f) * .2f, 
+		glm::vec2(0.f, -140.f), 
+		glm::vec2(1425.f, 400.f) * .275f, 
 		glm::vec4(1.f), 
 		ui_textures->find("Play Again Button")->second
 	);
