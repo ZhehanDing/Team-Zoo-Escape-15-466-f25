@@ -1605,50 +1605,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
 	glViewport(0, 0, drawable_size.x, drawable_size.y);
-	//11/23 Update
-	// --- GAME OVER SCREEN: clear everything and only draw text ---
-	if (game_over) {
-		// draw straight to default framebuffer
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		// clear color + depth so nothing from the scene remains
-		glDisable(GL_DEPTH_TEST);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // black background
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f,        0.0f, 0.0f,
-			0.0f,         1.0f,        0.0f, 0.0f,
-			0.0f,         0.0f,        1.0f, 0.0f,
-			0.0f,         0.0f,        0.0f, 1.0f
-		));
-
-		constexpr float H = 0.18f; // text size
-
-		// Red main title
-		glm::u8vec4 red = glm::u8vec4(0xff, 0x00, 0x00, 0xff);
-		lines.draw_text("Zoo has been locked",
-			glm::vec3(-0.7f, 0.1f, 0.0f),  // a bit above center
-			glm::vec3(H, 0.0f, 0.0f),
-			glm::vec3(0.0f, H, 0.0f),
-			red
-		);
-
-		// White instruction below
-		glm::u8vec4 white = glm::u8vec4(0xff, 0xff, 0xff, 0xff);
-		constexpr float H2 = 0.10f; // slightly smaller text
-		lines.draw_text("Press R to restart",
-			glm::vec3(-0.35f, -0.15f, 0.0f),  // below the first line
-			glm::vec3(H2, 0.0f, 0.0f),
-			glm::vec3(0.0f, H2, 0.0f),
-			white
-		);
-
-		glEnable(GL_DEPTH_TEST);
-		return; // IMPORTANT: skip all normal drawing
-	}
 	//11/23 Update
 	//update camera aspect ratio for drawable:
 	glm::mat4 world_to_clip = camera->make_projection() * glm::mat4(camera->transform->make_local_from_world());
@@ -2094,26 +2051,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		if (game_success)
 		{
 			pass_hint_active = false;
-			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
-
-			// ---- Center of screen ----
-			glm::vec3 anchor = glm::vec3(-0.3f, 0.0f, 0.0f);
-
-			// ---- BIG text scale ----
-			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
-			float pulse     = 0.5f + 0.5f * std::cos(pass_hint_timer * 4.0f);
-			float size      = 0.1f * (0.8f + 0.4f * pulse);
-			glm::vec3 x_dir = glm::vec3(size, 0.0f, 0.0f);   // width
-			glm::vec3 y_dir = glm::vec3(0.0f, size, 0.0f);   // height
-
-			lines.draw_text(
-				"You escaped the zoo... You are free!",
-				anchor,
-				x_dir,
-				y_dir,
-				hint_color,
-				nullptr
-				);
 		}
 	}
 
