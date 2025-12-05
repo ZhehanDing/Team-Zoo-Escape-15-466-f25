@@ -2041,10 +2041,10 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 		overlay.elements["Gate Open"].visible = pass_hint_active;
 		if (pass_hint_active) {
-			glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
+			// glm::u8vec4 hint_color = glm::u8vec4(255, 255, 255, 255);
 
-			// ---- Center of screen ----
-			glm::vec3 anchor = glm::vec3(-0.3f, 0.0f, 0.0f);
+			// // ---- Center of screen ----
+			// glm::vec3 anchor = glm::vec3(-0.3f, 0.0f, 0.0f);
 
 			// ---- BIG text scale ----
 			// You can increase 0.2f → 0.25f or 0.3f if you want it even bigger
