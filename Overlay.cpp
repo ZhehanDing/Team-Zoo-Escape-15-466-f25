@@ -83,6 +83,22 @@ Overlay::Overlay() {
         glm::value_ptr(glm::vec2(initial_size)));
     glUseProgram(0);
 }
+
+Overlay::~Overlay() {
+    if (fb) {
+        glDeleteFramebuffers(1, &fb);
+        fb = 0;
+    }
+
+    if (tex) {
+        glDeleteTextures(1, &tex);
+        tex = 0;
+    }
+    
+    interactions.clear();
+    elements.clear();
+}
+
 void Overlay::resize(glm::uvec2 const &overlay_size) {
     if (size == overlay_size) return;
     size = overlay_size;

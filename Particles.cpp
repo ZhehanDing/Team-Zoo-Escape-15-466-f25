@@ -139,6 +139,7 @@ ParticleInstanceBuffer::ParticleInstanceBuffer() {
 ParticleInstanceBuffer::~ParticleInstanceBuffer() {
 	glDeleteBuffers(1, &buffer);
 	glDeleteBuffers(1, &corner_buffer);
+	glDeleteVertexArrays(1, &vao);
 	buffer = 0;
     corner_buffer = 0;
     count = 0;

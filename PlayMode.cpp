@@ -34,6 +34,10 @@
 #include <functional>
 #include <memory>
 
+// can transition to
+#include "GameOverMode.hpp"
+#include "WinMode.hpp"
+
 GLuint zoo_for_basic_material_deferred_object = 0;
 GLuint light_for_basic_material_deferred_light = 0;
 // GLuint zoo_meshes_for_lit_color_texture_program = 0;
@@ -169,7 +173,9 @@ Load< Scene > zoo_scene_deferred(LoadTagDefault, []() -> Scene const * {
 						is_sky ? 1 : 0);
 		};
 
-		if (!is_sky && skip_bbox.find(transform->name) == skip_bbox.end()) {
+		if (!is_sky && skip_bbox.find(transform->name) == skip_bbox.end() && 
+			transform->name.find("Wild Grass") == std::string::npos
+		) {
 			bboxes.emplace_back(BBox(mesh, transform));
 		}
 	});
@@ -416,6 +422,7 @@ void make_civilian(
 }
 
 PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
+	Sound::stop_all_samples();
 	//get pointers to transforms for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Player") player = &transform;
@@ -810,13 +817,14 @@ void PlayMode::trigger_game_over() {
 	if (game_over) return; // idempotent
 	
 	game_over = true;
+	Sound::stop_all_samples();
 	Sound::play(*over_sample, 1.0f, 0.0f);
-	// Sound::stop_all_samples();
 }
 
 void PlayMode::trigger_game_success() {
 	if (game_success) return; // idempotent
 	game_success = true;
+	Sound::stop_all_samples();
 }
 
 
@@ -826,8 +834,6 @@ PlayMode::~PlayMode() {
 	if (deer_ui_vbo) glDeleteBuffers(1, &deer_ui_vbo);
 	if (deer_ui_vao) glDeleteVertexArrays(1, &deer_ui_vao);
 	*/
-
-
 }
 
 void PlayMode::start_footstep_loop()
@@ -895,6 +901,7 @@ void PlayMode::trigger_gate_open() {
 
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
+	if (game_over || game_success) return true;
 	//update 11/24 Alex Ding
 	// --- MAIN MENU INPUT ---
     if (screen_state == ScreenState::MENU) {
@@ -929,9 +936,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			return true;
 		}else if (evt.key.key == SDLK_R) {
 			// restart the game with a fresh PlayMode
-			if (game_over) {
-				Mode::set_current(std::make_shared< PlayMode >());
-			}
+			/*if (game_over) {
+				Mode::set_current( std::make_shared< PlayMode >() );
+			}*/
 			return true;
 		} else if (game_success) {
 			return false;
@@ -1161,7 +1168,7 @@ void PlayMode::update(float elapsed) {
 			return;
 		}
 
-	if (game_over) {
+	if (game_over || game_success) {
 		// Optional: keep camera/UI effects, but block gameplay logic
 		// camera->fovy = glm::mix(camera->fovy, target_fovy, 1.0f - std::exp(-elapsed * zoom_speed));
 		return;
@@ -1473,8 +1480,10 @@ void PlayMode::update(float elapsed) {
 	//2025/11/22 update
 	being_watched = false;
 	watching_civilian = nullptr;
-	for (auto &civ : civilians) {
-		civ.watching_player = false;
+	if (!civilians.empty()) {
+		for (auto &civ : civilians) {
+			civ.watching_player = false;
+		}
 	}
 
 	if (player) {
@@ -1552,8 +1561,10 @@ void PlayMode::update(float elapsed) {
 	}
 
 	// update civilians
-	for (auto &civilian : civilians) {
-		civilian_update(civilian, elapsed, player);
+	if (!civilians.empty()) {
+		for (auto &civilian : civilians) {
+			civilian_update(civilian, elapsed, player);
+		}
 	}
 	resolve_collisions(civilians);
 	civilian_avoid_obstacles(civilians, {{player, 0.7f}});
@@ -1571,10 +1582,19 @@ void PlayMode::update(float elapsed) {
 
 	// --- reset one-frame key counts ---
 	left.downs = right.downs = up.downs = down.downs = 0;
+
+	if (game_over) {
+		Mode::set_current(std::make_shared< GameOverMode >());
+	}
+	else if (game_success) {
+		Mode::set_current(std::make_shared< WinMode >());
+	}
 }
 
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
+	if (game_over || game_success) return;
+
 	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
 	glViewport(0, 0, drawable_size.x, drawable_size.y);
 	//11/23 Update

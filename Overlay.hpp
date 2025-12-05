@@ -35,6 +35,7 @@ extern Load < OverlayProgram > overlay_program;
 struct Overlay {
     // --- overlay setup
     Overlay(); 
+    ~Overlay();
 
     glm::uvec2 size = glm::uvec2(0);
 

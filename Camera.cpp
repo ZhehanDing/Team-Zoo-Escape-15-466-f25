@@ -83,7 +83,7 @@ void Camera::update_camera(float delta_mouse_x, float delta_mouse_y, std::vector
             if (tmax < 0.f || tmin > closest) continue;
             if (tmin < 0.f) tmin = tmax;
             if (tmin >= 0.f && tmin < closest) {
-                closest = tmin;
+                closest = std::max(tmin - .25f, 0.f);
             }
         }
     }

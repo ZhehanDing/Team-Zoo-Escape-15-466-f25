@@ -186,13 +186,16 @@ const std::vector< NamedTexture > ui_named_textures = {
     {"Move Tooltip", "textures/move_tooltip.png"},
     {"Watched Tooltip", "textures/watched_tooltip.png"},
     {"Warning Tooltip", "textures/warning_tooltip.png"},
-    {"Play Button", "textures/play_button.png"},
     {"Stalking Eye", "textures/stalking_eye.png"},
     {"Knife", "textures/knife.png"},
     {"Watching Indicator", "textures/exclamation.png"},
     {"Title Words", "textures/title_words.png"},
     {"Title Antlers", "textures/title_antlers.png"},
     {"Title Person", "textures/title_person.png"},
+    {"Game Over", "textures/game_over_words.png"},
+    {"Win", "textures/win_words.png"},
+    {"Play Button", "textures/play_button.png"},
+    {"Play Again Button", "textures/play_again_button.png"},
 };
 
 Load<std::map<std::string, GLuint>> ui_textures(LoadTagEarly, []() -> std::map<std::string, GLuint> const * {

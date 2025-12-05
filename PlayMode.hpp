@@ -66,7 +66,6 @@ struct PlayMode : Mode {
 	int deer_stage = 0; // 0 = original deer, 1 = deer + leg, 2 = ... etc.
 	glm::quat player_base_rotation;
 
-
 	// Deer Human
 	std::unique_ptr< Skeleton > deer_human_skeleton;
 	std::vector< std::unique_ptr< RiggedMesh > > deer_human_rigs;
@@ -93,7 +92,7 @@ struct PlayMode : Mode {
 	glm::quat gate_L_final, gate_R_final;
 
 	// camera:
-	Camera *cam;
+	Camera *cam = nullptr;
 	Scene::Camera *camera = nullptr;
 	bool focus_mode = false;		  // toggled with right mouse
 	float player_speed_factor = 0.5f; // 1.0 normally, 0.5 in focus mode
