@@ -433,6 +433,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 		if (transform.name == "Collider_Zoo Fence Near") zoo_fence_near_collider = &transform;
 		if (transform.name == "Collider_Zoo Fence Far") zoo_fence_far_collider = &transform;
 		if (transform.name == "_Collider_Small House") small_house_collider = &transform;
+		if (transform.name == "_Collider_Small House 2") small_house_2_collider = &transform;
 	}
 	if (player == nullptr) throw std::runtime_error("Player not found.");
 	if (final_deer == nullptr) throw std::runtime_error("final_deer not found.");
@@ -446,6 +447,7 @@ PlayMode::PlayMode() : scene(*zoo_scene_deferred) {
 	if (zoo_fence_near_collider == nullptr) throw std::runtime_error("zoo_fence_near_collider not found.");
 	if (zoo_fence_far_collider == nullptr) throw std::runtime_error("zoo_fence_far_collider not found.");
 	if (small_house_collider == nullptr) throw std::runtime_error("small_house_collider not found.");
+	if (small_house_2_collider == nullptr) throw std::runtime_error("small_house_2_collider not found.");
 
 	bg_loop = Sound::loop(*bg_sample, .75f, 0.0f);
 
@@ -1369,7 +1371,8 @@ void PlayMode::update(float elapsed) {
 			deer_fence_collider,
 			zoo_fence_near_collider,
 			zoo_fence_far_collider,
-			small_house_collider
+			small_house_collider,
+			small_house_2_collider
 		);
 
 		if (hits.escaped())

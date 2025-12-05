@@ -12,12 +12,13 @@ struct CollisionHits {
     bool zoo_fence_near = false;
     bool zoo_fence_far = false;
     bool small_house = false;
+    bool small_house_2 = false;
 
     bool any() const {
         // printf("CollisionHits: out_of_bounds=%d, gate=%d, deer_fence=%d, zoo_fence_near=%d, zoo_fence_far=%d\n",
         //        out_of_bounds, gate, deer_fence, zoo_fence_near, zoo_fence_far);
         // return false;
-        return out_of_bounds || gate || deer_fence || zoo_fence_near || zoo_fence_far || small_house;
+        return out_of_bounds || gate || deer_fence || zoo_fence_near || zoo_fence_far || small_house || small_house_2;
     }
 
     bool escaped() const {
@@ -32,7 +33,8 @@ CollisionHits query_world_collisions(
     Scene::Transform *deer_fence_collider,
     Scene::Transform *zoo_fence_near_collider,
     Scene::Transform *zoo_fence_far_collider,
-    Scene::Transform *small_house_collider
+    Scene::Transform *small_house_collider,
+    Scene::Transform *small_house_2_collider
 );
 
 // Simple AABB test
