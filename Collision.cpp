@@ -20,6 +20,7 @@ namespace {
     const glm::vec3 ZOO_FENCE_FAR_HALF    = glm::vec3(58.0f, 49.0f, 3.0f);
     const glm::vec3 SMALL_HOUSE_HALF    = glm::vec3(5.5f, 7.2f, 3.0f);
     const glm::vec3 SMALL_HOUSE_2_HALF    = glm::vec3(2.0f, 3.83f, 3.0f);
+    const glm::vec3 CAR_HALF    = glm::vec3(1.4f, 4.0f, 1.0f);
 }
 
 namespace { // bounds for the playable area
@@ -37,7 +38,9 @@ CollisionHits query_world_collisions(
     Scene::Transform *zoo_fence_near_collider,
     Scene::Transform *zoo_fence_far_collider,
     Scene::Transform *small_house_collider,
-    Scene::Transform *small_house_2_collider
+    Scene::Transform *small_house_2_collider,
+    Scene::Transform *car_collider,
+    Scene::Transform *car_collider_2
 ) {
     CollisionHits hits;
 
@@ -68,6 +71,12 @@ CollisionHits query_world_collisions(
     }
     if (small_house_2_collider) {
         hits.small_house_2 = check_collision(new_pos, PLAYER_HALF, small_house_2_collider->position, SMALL_HOUSE_2_HALF);
+    }
+    if (car_collider) {
+        hits.car = check_collision(new_pos, PLAYER_HALF, car_collider->position, CAR_HALF);
+    }
+    if (car_collider_2) {
+        hits.car_2 = check_collision(new_pos, PLAYER_HALF, car_collider_2->position, CAR_HALF);
     }
 
     return hits;

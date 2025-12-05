@@ -63,6 +63,8 @@ struct PlayMode : Mode {
 	Scene::Transform *zoo_fence_far_collider = nullptr;
 	Scene::Transform *small_house_collider = nullptr;
 	Scene::Transform *small_house_2_collider = nullptr;
+	Scene::Transform *car_collider = nullptr;
+	Scene::Transform *car_collider_2 = nullptr;
 	std::vector<Scene::Transform *> trees;
 	// std::vector<Scene::Transform *> cylinders;
 	int deer_stage = 0; // 0 = original deer, 1 = deer + leg, 2 = ... etc.
